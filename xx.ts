@@ -88,6 +88,43 @@ EEE
       source: false,
       confirm: false,
     },
+    /*
+    ## The commands
+
+    | Command | When | What it runs |
+    |---|---|---|
+    | `xx "submodule add"` | once, ever | `git submodule add -b main … encrypt` and `-b master … stopsopa.github.io`; skips any already in `.gitmodules` |
+    | `xx "submodule install"` | once per clone | `git submodule update --init --recursive`, plus `git config submodule.recurse true` |
+    | `xx "submodule update"` | when you want newer code | `git submodule update --init --remote`, then lists the commits that came in |
+    | `xx "submodule status"` | anytime | per submodule: branch, current commit, newest remote commit, how far behind, uncommitted files |
+
+    To get going: run `xx "submodule add"`, then `git add xx.ts && git commit && git push`.
+
+    ## How submodules work
+
+    The parent repo never stores the submodule's files. It stores two things:
+
+    - **`.gitmodules`**: path, URL and branch of each submodule.
+    - **A pinned commit**: the exact SHA of each submodule, recorded in the parent's commit.
+
+    The parent always pins a commit; it never follows a branch. The branch in `.gitmodules` is only a hint telling `update --remote` where to look for the newest commit.
+
+    ## How many operations
+
+    Three, plus status:
+
+    1. **Add** (once ever): register the URL and branch, then commit `.gitmodules` and the pin.
+    2. **Install** (once per clone): download each submodule at its pinned commit. `git clone --recurse-submodules` does the same in one go.
+    3. **Update** (whenever you choose): move the pins to the tip of the tracked branches, then `git add encrypt stopsopa.github.io && git commit` in the parent. Without that commit, nobody else sees the bump.
+
+    Staying on track day to day needs no extra command: with `submodule.recurse true`, a plain `git pull` or `git switch` in the parent also moves the submodules to whatever is pinned.
+
+    ## Things that catch people out
+
+    - **Detached HEAD**: after install or update, a submodule sits on a commit, not a branch. To work inside one, run `git switch main` (or `master`) there first, commit and push there, then commit the new pin in the parent.
+    - **Push order**: push the submodule before the parent, otherwise the parent pins a commit nobody else can fetch.
+    - **Dirty parent**: `git status` in the parent showing `modified: encrypt (new commits)` just means the submodule is on a different commit than the pin. Either commit it (a bump) or run `xx "submodule install"` to go back to the pin.
+    */
     [`submodule add`]: {
       command: `
 set -e
