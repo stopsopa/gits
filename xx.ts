@@ -70,9 +70,9 @@ cat <<EEE
 
   Meta repository: other repositories mounted here as git submodules.
 
-    directory            repository                                        tracked branch
-    encrypt              git@github.com:stopsopa/encrypt.git               main
-    stopsopa.github.io   git@github.com:stopsopa/stopsopa.github.io.git    master
+    directory                       repository                                        tracked branch
+    submodules/encrypt              git@github.com:stopsopa/encrypt.git               main
+    submodules/stopsopa.github.io   git@github.com:stopsopa/stopsopa.github.io.git    master
 
   This repository does not store the files of the submodules, only (in .gitmodules)
   their url + branch and (in the commit) the exact commit each of them is pinned to.
@@ -80,6 +80,7 @@ cat <<EEE
   xx "submodule add"       once, ever        register the submodules and commit the result
   xx "submodule install"   once per clone    download the submodules at the pinned commits
   xx "submodule update"    when you want     move the pins to the newest commit of the tracked branches
+  xx "submodule delete"    rarely            remove one submodule completely: xx "submodule delete" submodules/encrypt
   xx "submodule status"    anytime           where the pins are and how far behind the branches
 
 EEE
@@ -93,9 +94,10 @@ EEE
 
     | Command | When | What it runs |
     |---|---|---|
-    | `xx "submodule add"` | once, ever | `git submodule add -b main … encrypt` and `-b master … stopsopa.github.io`; skips any already in `.gitmodules` |
+    | `xx "submodule add"` | once, ever | `git submodule add -b main … submodules/encrypt` and `-b master … submodules/stopsopa.github.io`; skips any already in `.gitmodules` |
     | `xx "submodule install"` | once per clone | `git submodule update --init --recursive`, plus `git config submodule.recurse true` |
     | `xx "submodule update"` | when you want newer code | `git submodule update --init --remote`, then lists the commits that came in |
+    | `xx "submodule delete" <path>` | rarely | `git submodule deinit -f <path>`, `git rm -f <path>`, `rm -rf .git/modules/<name>`; refuses when the submodule has uncommitted changes or unpushed commits |
     | `xx "submodule status"` | anytime | per submodule: branch, current commit, newest remote commit, how far behind, uncommitted files |
 
     To get going: run `xx "submodule add"`, then `git add xx.ts && git commit && git push`.
@@ -111,11 +113,15 @@ EEE
 
     ## How many operations
 
-    Three, plus status:
+    Three, plus delete and status:
 
     1. **Add** (once ever): register the URL and branch, then commit `.gitmodules` and the pin.
     2. **Install** (once per clone): download each submodule at its pinned commit. `git clone --recurse-submodules` does the same in one go.
-    3. **Update** (whenever you choose): move the pins to the tip of the tracked branches, then `git add encrypt stopsopa.github.io && git commit` in the parent. Without that commit, nobody else sees the bump.
+    3. **Update** (whenever you choose): move the pins to the tip of the tracked branches, then `git add submodules && git commit` in the parent. Without that commit, nobody else sees the bump.
+
+    4. **Delete** (rarely): three places have to be cleaned, there is no single git command for it: `.git/config` + the directory (`git submodule deinit`), the pin + `.gitmodules` (`git rm`) and the local clone in `.git/modules/<name>` (`rm -rf`). Then commit in the parent.
+
+    Moving a submodule to another directory is not delete + add, it is just `git mv old/path new/path` and a commit.
 
     Staying on track day to day needs no extra command: with `submodule.recurse true`, a plain `git pull` or `git switch` in the parent also moves the submodules to whatever is pinned.
 
@@ -123,7 +129,7 @@ EEE
 
     - **Detached HEAD**: after install or update, a submodule sits on a commit, not a branch. To work inside one, run `git switch main` (or `master`) there first, commit and push there, then commit the new pin in the parent.
     - **Push order**: push the submodule before the parent, otherwise the parent pins a commit nobody else can fetch.
-    - **Dirty parent**: `git status` in the parent showing `modified: encrypt (new commits)` just means the submodule is on a different commit than the pin. Either commit it (a bump) or run `xx "submodule install"` to go back to the pin.
+    - **Dirty parent**: `git status` in the parent showing `modified: submodules/encrypt (new commits)` just means the submodule is on a different commit than the pin. Either commit it (a bump) or run `xx "submodule install"` to go back to the pin.
     */
     [`submodule add`]: {
       command: `
@@ -132,13 +138,13 @@ set -e
 if git config -f .gitmodules --get submodule.encrypt.url > /dev/null 2>&1; then
   echo "encrypt: already registered in .gitmodules, skipping"
 else
-  git submodule add -b main git@github.com:stopsopa/encrypt.git encrypt
+  git submodule add -b main --name encrypt git@github.com:stopsopa/encrypt.git submodules/encrypt
 fi
 
 if git config -f .gitmodules --get submodule.stopsopa.github.io.url > /dev/null 2>&1; then
   echo "stopsopa.github.io: already registered in .gitmodules, skipping"
 else
-  git submodule add -b master git@github.com:stopsopa/stopsopa.github.io.git stopsopa.github.io
+  git submodule add -b master --name stopsopa.github.io git@github.com:stopsopa/stopsopa.github.io.git submodules/stopsopa.github.io
 fi
 
 echo ""
@@ -153,7 +159,7 @@ cat <<EEE
 
 EEE
 `,
-      description: `one time: register encrypt (main) and stopsopa.github.io (master) as submodules. Safe to run again`,
+      description: `one time: register encrypt (main) and stopsopa.github.io (master) as submodules in ./submodules. Safe to run again`,
     },
     [`submodule install`]: {
       command: `
@@ -185,13 +191,74 @@ cat <<EEE
 
 If commits are listed above, the pins moved. Record that in this repository:
 
-    git add encrypt stopsopa.github.io
+    git add submodules
     git commit -m "bump submodules"
     git push
 
 EEE
 `,
       description: `move every submodule to the newest commit of its tracked branch (branch is in .gitmodules). Commit afterwards`,
+    },
+    [`submodule delete`]: {
+      command: `
+set -e
+
+P="\${1%/}"
+
+if [ -z "\${P}" ]; then
+  cat <<EEE
+
+usage: xx "submodule delete" <path of the submodule>
+
+registered submodules:
+\$(git config -f .gitmodules --get-regexp '^submodule\\..*\\.path\$' | awk '{print "    " \$2}')
+
+EEE
+  exit 1
+fi
+
+NAME="\$(git config -f .gitmodules --get-regexp '^submodule\\..*\\.path\$' | awk -v p="\${P}" '\$2 == p { sub(/^submodule\\./, "", \$1); sub(/\\.path\$/, "", \$1); print \$1 }')"
+
+if [ -z "\${NAME}" ]; then
+  echo "ERROR: >\${P}< is not a path of a submodule registered in .gitmodules"
+  exit 1
+fi
+
+# the local clone of the submodule is deleted too, so refuse to lose work which exists only here
+if [ -e "\${P}/.git" ]; then
+  if [ -n "\$(git -C "\${P}" status --porcelain)" ]; then
+    echo "ERROR: \${P} has uncommitted changes, commit or discard them first"
+    exit 1
+  fi
+  if [ -n "\$(git -C "\${P}" log --oneline HEAD --branches --not --remotes)" ]; then
+    echo "ERROR: \${P} has commits which were never pushed, push them first:"
+    git -C "\${P}" --no-pager log --oneline HEAD --branches --not --remotes
+    exit 1
+  fi
+fi
+
+# 1. .git/config entry + content of the directory
+git submodule deinit -f "\${P}"
+
+# 2. the directory, the pinned commit and the entry in .gitmodules (staged)
+git rm -f "\${P}"
+
+# 3. the local clone kept in .git/modules
+rm -rf "\$(git rev-parse --git-dir)/modules/\${NAME}"
+
+echo ""
+git status --short
+
+cat <<EEE
+
+Submodule \${P} is removed and the removal is staged. To finish, commit it:
+
+    git commit -m "remove submodule \${P}"
+    git push
+
+EEE
+`,
+      description: `remove one submodule completely. Argument: its path, e.g. xx "submodule delete" submodules/encrypt. Commit afterwards`,
     },
     [`submodule status`]: {
       command: `

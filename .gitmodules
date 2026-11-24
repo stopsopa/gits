@@ -1,8 +1,8 @@
 [submodule "encrypt"]
-	path = encrypt
+	path = submodules/encrypt
 	url = git@github.com:stopsopa/encrypt.git
 	branch = main
 [submodule "stopsopa.github.io"]
-	path = stopsopa.github.io
+	path = submodules/stopsopa.github.io
 	url = git@github.com:stopsopa/stopsopa.github.io.git
 	branch = master
