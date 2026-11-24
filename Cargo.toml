@@ -1,0 +1,16 @@
+[package]
+name = "gits"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "gits"
+path = "src/main.rs"
+
+[dependencies]
+# SIGINT / SIGTERM handler, so the temporary clone is removed also after Ctrl+C
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+strip = true

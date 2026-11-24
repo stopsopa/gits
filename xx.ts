@@ -73,9 +73,15 @@ cat <<EEE
     directory                       repository                                        tracked branch
     submodules/encrypt              git@github.com:stopsopa/encrypt.git               main
     submodules/stopsopa.github.io   git@github.com:stopsopa/stopsopa.github.io.git    master
+    submodules/xx                   git@github.com:stopsopa/xx.git                    main
 
   This repository does not store the files of the submodules, only (in .gitmodules)
   their url + branch and (in the commit) the exact commit each of them is pinned to.
+
+  gits (this repository) is a Rust program: src/, tests/, see README.md
+
+  xx compile               build bin/<arch>/gits
+  xx test                  compile + unit tests + tests/test*/test.sh
 
   xx "submodule add"       once, ever        register the submodules and commit the result
   xx "submodule install"   once per clone    download the submodules at the pinned commits
@@ -94,7 +100,7 @@ EEE
 
     | Command | When | What it runs |
     |---|---|---|
-    | `xx "submodule add"` | once, ever | `git submodule add -b main … submodules/encrypt` and `-b master … submodules/stopsopa.github.io`; skips any already in `.gitmodules` |
+    | `xx "submodule add"` | once, ever | `git submodule add -b main … submodules/encrypt` `-b master … submodules/stopsopa.github.io` and `-b main … submodules/xx`; skips any already in `.gitmodules` |
     | `xx "submodule install"` | once per clone | `git submodule update --init --recursive`, plus `git config submodule.recurse true` |
     | `xx "submodule update"` | when you want newer code | `git submodule update --init --remote`, then lists the commits that came in |
     | `xx "submodule delete" <path>` | rarely | `git submodule deinit -f <path>`, `git rm -f <path>`, `rm -rf .git/modules/<name>`; refuses when the submodule has uncommitted changes or unpushed commits |
@@ -147,6 +153,12 @@ else
   git submodule add -b master --name stopsopa.github.io git@github.com:stopsopa/stopsopa.github.io.git submodules/stopsopa.github.io
 fi
 
+if git config -f .gitmodules --get submodule.xx.url > /dev/null 2>&1; then
+  echo "xx: already registered in .gitmodules, skipping"
+else
+  git submodule add -b main --name xx git@github.com:stopsopa/xx.git submodules/xx
+fi
+
 echo ""
 git submodule status
 
@@ -159,7 +171,7 @@ cat <<EEE
 
 EEE
 `,
-      description: `one time: register encrypt (main) and stopsopa.github.io (master) as submodules in ./submodules. Safe to run again`,
+      description: `one time: register encrypt (main), stopsopa.github.io (master) and xx (main) as submodules in ./submodules. Safe to run again`,
     },
     [`submodule install`]: {
       command: `
@@ -280,6 +292,26 @@ echo ""
 '
 `,
       description: `pinned commit of every submodule and how far it is behind its tracked branch (fetches)`,
+      confirm: false,
+    },
+    [`compile`]: {
+      command: `
+set -e
+
+/bin/bash compile.sh
+`,
+      description: `build the gits binary for this machine: bin/<arch>/gits`,
+      confirm: false,
+    },
+    [`test`]: {
+      command: `
+set -e
+
+/bin/bash compile.sh
+
+/bin/bash test.sh
+`,
+      description: `compile + cargo test + tests/test*/test.sh`,
       confirm: false,
     },
     ...setup,

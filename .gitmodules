@@ -6,3 +6,7 @@
 	path = submodules/stopsopa.github.io
 	url = git@github.com:stopsopa/stopsopa.github.io.git
 	branch = master
+[submodule "xx"]
+	path = submodules/xx
+	url = git@github.com:stopsopa/xx.git
+	branch = main
