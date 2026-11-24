@@ -1,3 +1,6 @@
 # Rust build artifacts
 /target/
 /bin/
+
+# everything the examples generate (socket, log, compiled client)
+/examples/wait/tmp/

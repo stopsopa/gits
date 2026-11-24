@@ -23,7 +23,9 @@
 # What the test gets:
 #   _ROOT  - root of the repository
 #   BIN    - compiled gits binary (compile.sh)
-#   WORK   - temporary directory, removed when the test ends. Nothing is created in tests/
+#   WORK   - ${_DIR}/tmp: everything the test produces is there, in the directory of the test itself.
+#            It is NOT removed when the test ends (to look at what was left), the test clears it
+#            at its beginning. Ignored by git: tests/testNNN/.gitignore
 #   HOME   - ${WORK}/home (empty: "~/..." sources and the git config of the developer can't influence the test)
 #   pwd    - ${WORK}
 #   GITSTORAGESOURCE - ${WORK}/GITSTORAGESOURCE, an empty bare repository: the storage
@@ -41,7 +43,11 @@
 #   stored <file>               content of the file as it is in the storage right now
 #   storage_commits             number of commits in the storage
 # Helpers for the setup between the tests:
-#   project <directory> <remote>, storage <directory>, socket_server [key], fail <message>
+#   project <directory> <remote>, storage <directory>, fail <message>
+# Encryption (only the tests which need it, see the comment above encoder_start):
+#   encoder_start [name of the key]     the real encoder process of submodules/encrypt on a unix socket
+#   encoder_stop, demo_key <name>
+#   ssenc <args>                        the ssenc binary of submodules/encrypt (inside of COMMAND)
 #
 # WARNING: bash/test.sh defines function "test", so the builtin "test" is not available in the tests
 # (use [[ ... ]]), and COMMAND, EXPECTED_*, RESULT_*, LABEL, STOP are its variables.
@@ -72,24 +78,27 @@ unset GITS_CONFIRM
 unset GITS_TEST_ANSWER
 unset NO_COLOR
 
-WORK="$(cd "$(mktemp -d)" && pwd -P)"
+mkdir -p "${_DIR}/tmp"
 
-SOCKET_SERVER_PID=""
+WORK="$(cd "${_DIR}/tmp" && pwd -P)"
+
+# ${WORK} is inside of the repository of gits: git started in a directory of the test which is not
+# a repository must not walk up and find that one
+export GIT_CEILING_DIRECTORIES="${_DIR}"
+
+AGENT_PID=""
 
 source "${_ROOT}/bash/test.sh" "${0}"
 
 set -o pipefail
 
-# the library registers "trap test_result EXIT", here the same and the cleaning before it
-# (exit code of the script is taken first and passed, test_result can't see it after the cleaning)
+# the library registers "trap test_result EXIT", here the same and stopping of the socket server before it
+# (exit code of the script is taken first and passed, test_result can't see it after that).
+# ${WORK} stays as it is.
 function _lib_exit {
   local CODE="${?}"
-  if [[ -n "${SOCKET_SERVER_PID}" ]]; then
-    kill "${SOCKET_SERVER_PID}" 2> /dev/null
-    wait "${SOCKET_SERVER_PID}" 2> /dev/null
-  fi
-  cd /
-  rm -rf "${WORK}"
+  encoder_stop
+  agent_stop
   test_result "${CODE}"
 }
 
@@ -174,25 +183,116 @@ function storage_commits {
   git -C "${GITSTORAGESOURCE}" rev-list --count --all 2> /dev/null || echo 0
 }
 
-# socket_server [key]
-# starts tests/_socket_server.mjs (stand-in for the encoder process of submodules/encrypt)
-# and exports GITSTORAGETENCRYPTIONSOCKET
-function socket_server {
-  local SOCK="${WORK}/enc-${RANDOM}.sock"
-  if [[ -n "${SOCKET_SERVER_PID}" ]]; then
-    kill "${SOCKET_SERVER_PID}" 2> /dev/null
-    wait "${SOCKET_SERVER_PID}" 2> /dev/null
+# ---------- encryption: the real thing from submodules/encrypt ----------
+#
+# What submodules/encrypt/examples/SUMMARY.md describes in "socket-002-encoder_process_on_a_socket",
+# here everything in ${WORK} of the test:
+#
+#   ${WORK}/keys/<name>, <name>.pub   demo ssh key without a passphrase (ssh-keygen)
+#   ${WORK}/agent.sock                private ssh-agent which holds the demo keys. The agent of the
+#                                     developer is never asked and never changed: SSH_AUTH_SOCK is
+#                                     not exported, every command here gets it explicitly
+#   ${WORK}/ssenc.sock                the encoder process, started by tests/encoder/encoder-start.sh:
+#                                     node submodules/encrypt/examples/socket/server.ts --ssh-key <name>.pub --seal
+#   ${WORK}/ssenc.sock.log            its output, one line per request
+#   ${WORK}/ssenc.sock.pid            its pid
+#
+# and GITSTORAGETENCRYPTIONSOCKET=${WORK}/ssenc.sock is exported: gits talks to that socket.
+#
+# The ssenc binary (submodules/encrypt/rust/bin/ssenc) is not used by gits and not by the encoder
+# process. The tests use it to look at the stored files from outside: a file gits stored has to be
+# an ordinary ssenc file which the binary opens with the same key.
+
+ENCRYPT="${_ROOT}/submodules/encrypt"
+AGENT_SOCK="${WORK}/agent.sock"
+
+# the binary is compiled when it is not there yet (the first run, CI)
+function ssenc_build {
+  if [[ ! -f "${ENCRYPT}/rust/compile.sh" ]]; then
+    fail "submodule not found at >${ENCRYPT}<, get it with: git submodule update --init submodules/encrypt"
   fi
-  HOME="${REAL_HOME}" NODE_OPTIONS="" node "${_ROOT}/tests/_socket_server.mjs" "${SOCK}" "${1:-key-one}" > "${WORK}/socket-server.log" 2>&1 &
-  SOCKET_SERVER_PID="${!}"
-  local I
-  for I in $(seq 1 100); do
-    if [[ -S "${SOCK}" ]]; then
-      export GITSTORAGETENCRYPTIONSOCKET="${SOCK}"
-      return 0
+  if [[ ! -x "${ENCRYPT}/rust/target/release/ssenc" ]]; then
+    echo "compiling ${ENCRYPT}/rust/target/release/ssenc"
+    HOME="${REAL_HOME}" /bin/bash "${ENCRYPT}/rust/compile.sh" > "${WORK}/ssenc-compile.log" 2>&1
+    if [[ "${?}" != "0" ]]; then
+      cat "${WORK}/ssenc-compile.log"
+      fail "can't compile ssenc with >${ENCRYPT}/rust/compile.sh<"
     fi
-    sleep 0.05
-  done
-  cat "${WORK}/socket-server.log"
-  fail "tests/_socket_server.mjs didn't start"
+  fi
+}
+
+function ssenc {
+  SSH_AUTH_SOCK="${AGENT_SOCK}" "${ENCRYPT}/rust/bin/ssenc" "${@}"
+}
+
+# the private agent, started once per test
+function agent_start {
+  if [[ -n "${AGENT_PID}" ]]; then
+    return 0
+  fi
+  # limit of the operating system for a path of a unix socket: 104 bytes on macOS, 108 on Linux
+  if [[ "${#AGENT_SOCK}" -gt 100 ]]; then
+    fail "path of the socket >${AGENT_SOCK}< is too long (${#AGENT_SOCK}, limit is about 100): the repository is too deep in the filesystem"
+  fi
+  rm -f "${AGENT_SOCK}"
+  local OUT
+  OUT="$(ssh-agent -a "${AGENT_SOCK}")" || fail "ssh-agent could not be started on >${AGENT_SOCK}<"
+  AGENT_PID="$(echo "${OUT}" | grep -o 'SSH_AGENT_PID=[0-9]*' | cut -d = -f 2)"
+  # exit code 2: nobody answers on that socket. Without this check a key could end up in another agent
+  SSH_AUTH_SOCK="${AGENT_SOCK}" ssh-add -l > /dev/null 2>&1
+  if [[ "${?}" == "2" || -z "${AGENT_PID}" ]]; then
+    fail "private ssh-agent doesn't answer on >${AGENT_SOCK}<"
+  fi
+}
+
+function agent_stop {
+  if [[ -n "${AGENT_PID}" ]]; then
+    # only an ssh-agent is killed, whatever happened to that pid meanwhile
+    if [[ "$(ps -p "${AGENT_PID}" -o comm= 2> /dev/null)" == *ssh-agent* ]]; then
+      kill "${AGENT_PID}" 2> /dev/null
+    fi
+    AGENT_PID=""
+    rm -f "${AGENT_SOCK}"
+  fi
+}
+
+# the encoder process is started and stopped with the scripts made for everyday use:
+# tests/encoder/encoder-start.sh and tests/encoder/encoder-stop.sh
+ENCODER_SOCK="${WORK}/ssenc.sock"
+
+function encoder_stop {
+  GITSTORAGETENCRYPTIONSOCKET="${ENCODER_SOCK}" /bin/bash "${_ROOT}/tests/encoder/encoder-stop.sh" >> "${WORK}/encoder-scripts.log" 2>&1
+}
+
+# demo_key <name>
+# ${WORK}/keys/<name> and <name>.pub, made when not there yet and loaded into the private agent
+function demo_key {
+  local KEY="${WORK}/keys/${1}"
+  agent_start
+  if [[ ! -f "${KEY}" ]]; then
+    mkdir -p "${WORK}/keys"
+    ssh-keygen -q -t ed25519 -N "" -C "gits-test-${1}" -f "${KEY}" || fail "ssh-keygen failed for >${KEY}<"
+    SSH_AUTH_SOCK="${AGENT_SOCK}" ssh-add -q "${KEY}" || fail "ssh-add failed for >${KEY}<"
+  fi
+}
+
+# encoder_start [name of the key]
+# (re)starts the encoder process with the given demo key and exports GITSTORAGETENCRYPTIONSOCKET
+function encoder_start {
+  local NAME="${1:-key-one}"
+
+  demo_key "${NAME}"
+  encoder_stop
+
+  # HOME: node may be installed in the real one (asdf, nvm)
+  SSH_AUTH_SOCK="${AGENT_SOCK}" HOME="${REAL_HOME}" \
+    GITSTORAGETENCRYPTIONSOCKET="${ENCODER_SOCK}" GITS_ENCODER_SSH_KEY="${WORK}/keys/${NAME}.pub" \
+    /bin/bash "${_ROOT}/tests/encoder/encoder-start.sh" >> "${WORK}/encoder-scripts.log" 2>&1
+
+  if [[ "${?}" != "0" ]]; then
+    cat "${WORK}/encoder-scripts.log"
+    fail "tests/encoder/encoder-start.sh failed"
+  fi
+
+  export GITSTORAGETENCRYPTIONSOCKET="${ENCODER_SOCK}"
 }

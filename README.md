@@ -105,6 +105,44 @@ to the process listening there, which is the encoder of
 - `pull --yes`: decrypted next to the stored file, then copied over SOURCE. A failed decryption never touches the local file.
 - An element changed from `::` to `:e:` (or back) is converted by the next `gits push --yes`.
 
+### Keeping the encoder process running
+
+The encoder process needs Node.js >= 22.18, a checkout of
+[stopsopa/encrypt](https://github.com/stopsopa/encrypt) (here: `submodules/encrypt`) and an ssh key
+whose private part is loaded in your `ssh-agent` (`ssh-add -l`).
+
+```sh
+export GITSTORAGETENCRYPTIONSOCKET="${HOME}/.gits/ssenc.sock"   # where it listens, gits reads the same variable
+export GITS_ENCODER_SSH_KEY="${HOME}/.ssh/id_ed25519.pub"       # .pub file or fingerprint (SHA256:...)
+
+/bin/bash tests/encoder/encoder-start.sh     # starts it; when it already runs nothing happens. Call it as often as you like
+gits diff
+/bin/bash tests/encoder/encoder-stop.sh      # stops it; fine to call when it doesn't run
+```
+
+It keeps running after the terminal is closed. Next to the socket are `<socket>.pid` and
+`<socket>.log` (one line per request). `GITS_ENCODER_DIR` points to the checkout of
+stopsopa/encrypt when it is not `submodules/encrypt` of this repository.
+
+### The wrapper: `gits.sh`
+
+`gits.sh` calls `tests/encoder/encoder-start.sh` and then the binary with the same arguments, so the
+encoder process doesn't have to be thought about:
+
+```sh
+export GITSTORAGESOURCE="git@github.com:you/storage.git"
+export GITS_BIN="/path/to/gits"                          # the binary
+export GITS_ENCODER_SSH_KEY="~/.ssh/id_ed25519.pub"
+alias gits='/bin/bash "/path/to/this/repository/gits.sh"'
+```
+
+- Without `GITS_ENCODER_SSH_KEY` nothing is started, the binary is called as it is.
+- Without `GITSTORAGETENCRYPTIONSOCKET` the socket is `~/.gits/ssenc.sock`.
+- Nothing is printed about the encoder process unless it can't be started; then gits is not
+  called and the exit code is 1.
+- It works from a checkout of this repository (it finds `tests/encoder/encoder-start.sh` relative to itself).
+  It is not part of a release and `gits --update` replaces only the binary.
+
 ## Environment variables
 
 `gits --help` prints this table with the values found on your machine.
@@ -145,9 +183,14 @@ somebody who controls the release.
 Every `tests/testNNN/test.sh` is a list of checks made with the function `test` of the library
 `bash/test.sh`: a command (`COMMAND`) and what it has to give (`EXPECTED_STDOUT`, `EXPECTED_STDERR`,
 `EXPECTED_CODE`). A single test can be executed alone: `/bin/bash tests/test003/test.sh`.
-Every test works in its own temporary directory with its own `HOME`, git config and an empty bare
-repository as the storage (`tests/_lib.sh`, also the helpers used in the commands); nothing is written into `tests/`.
-`tests/_socket_server.mjs` stands in for the encoder process (same protocol, base64 instead of encryption).
+Every test works in `tests/testNNN/tmp/` with its own `HOME`, git config and an empty bare
+repository as the storage (`tests/_lib.sh`, also the helpers used in the commands). That directory is
+ignored by git (`tests/testNNN/.gitignore`), cleared at the beginning of the test and left there at its
+end, to look at what the test produced.
+`tests/test007` (encryption) uses the real encoder process of `submodules/encrypt`
+(`examples/socket/server.ts`, with a demo ssh key in a private `ssh-agent` and `--seal`) and the `ssenc`
+binary of the submodule to check the stored files from outside; the binary is compiled by the test when
+it is not there yet. The submodule has to be there: `git submodule update --init submodules/encrypt`.
 
 | | |
 | --- | --- |
@@ -158,4 +201,6 @@ repository as the storage (`tests/_lib.sh`, also the helpers used in the command
 | `src/cli.rs` | the only place where other programs are started (git, the shell reading the config, curl...): env, working directory, output forwarded while it flows and collected. Rust version of `workshop/cli/cli.ts` |
 | `src/socket.rs` | client of the encoder process |
 | `src/update.rs` | `--update` |
+| `gits.sh` | wrapper: makes sure the encoder process runs, then calls the binary |
+| `tests/encoder/encoder-start.sh`, `tests/encoder/encoder-stop.sh` | the encoder process of `submodules/encrypt` on `GITSTORAGETENCRYPTIONSOCKET` |
 | `.github/workflows/rust.yml` | test -> build (macOS arm64, Linux x64, Linux arm64) -> release on a tag |

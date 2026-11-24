@@ -1,1 +1,1 @@
-# nothing is generated here, every test works in its own temporary directory
+# what a test produces is in tests/testNNN/tmp/, ignored by tests/testNNN/.gitignore

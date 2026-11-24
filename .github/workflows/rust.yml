@@ -23,28 +23,48 @@ jobs:
     name: Test on Linux x64
     runs-on: ubuntu-latest
     steps:
-      # submodules are not needed (and their urls are ssh): tests use tests/_socket_server.mjs
-      # in place of the encoder process of submodules/encrypt
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # tests/test007 and tests/test011 (encryption) talk to the real encoder process of submodules/encrypt.
+      # Only that one submodule is fetched. Its url in .gitmodules is ssh (git@github.com:...),
+      # there is no ssh key here and the repository is public: https is used instead.
+      - name: Checkout submodule submodules/encrypt
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule update --init --depth 1 submodules/encrypt
+          git submodule status submodules/encrypt
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-gnu
 
-      # tests/_socket_server.mjs
+      # the encoder process: node submodules/encrypt/examples/socket/server.ts
+      # (TypeScript executed by Node directly, needs Node.js >= 22.18)
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: 24
 
-      # GITSTORAGETESHELL is tested with bash and with zsh
-      - name: Install zsh
-        run: sudo apt-get update && sudo apt-get install -y zsh
+      # zsh: GITSTORAGETESHELL is tested with bash and with zsh
+      # nc:  tests/encoder/encoder-start.sh asks the socket with it whether the encoder process answers
+      - name: Install zsh and nc
+        run: sudo apt-get update && sudo apt-get install -y zsh netcat-openbsd
 
       - name: Compile binary
         run: /bin/bash compile.sh
+
+      # submodules/encrypt/rust/target/release/ssenc: tests/test007 and tests/test011 open with it the files gits stored.
+      # (the test would compile it by itself, here it is a step of its own to see its output)
+      - name: Compile ssenc binary of submodules/encrypt
+        run: /bin/bash submodules/encrypt/rust/compile.sh
+
+      # ssh-keygen, ssh-agent, ssh-add: demo key and private agent of tests/test007 and tests/test011
+      - name: Check ssh tools
+        run: |
+          command -v ssh-keygen ssh-agent ssh-add
+          ssh -V
 
       - name: Run unit and E2E tests
         run: /bin/bash test.sh

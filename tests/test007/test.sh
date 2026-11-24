@@ -1,7 +1,10 @@
 #
 # "SOURCE:e:TARGET": stored encrypted. gits doesn't encrypt, it asks the process listening on
-# the unix socket GITSTORAGETENCRYPTIONSOCKET (here tests/_socket_server.mjs, the same protocol
-# as submodules/encrypt/examples/socket/server.ts).
+# the unix socket GITSTORAGETENCRYPTIONSOCKET - here the real one:
+# submodules/encrypt/examples/socket/server.ts with a demo ssh key in a private ssh-agent and --seal,
+# the way "socket-002-encoder_process_on_a_socket" of submodules/encrypt/examples/SUMMARY.md shows it.
+# The ssenc binary of the submodule (compiled here when it is not there yet) looks at the stored
+# files from outside: they have to be ordinary ssenc files which it opens with the same key.
 #
 # /bin/bash tests/test007/test.sh
 # /bin/bash test.sh test007
@@ -23,11 +26,18 @@ case ${_SHELL} in
     ;;
 esac
 
+# what the previous run left (kept after the test to look at it, ignored by git: .gitignore next to this file)
+if [[ -d "${_DIR}/tmp" ]]; then
+  chmod -R u+w "${_DIR}/tmp"
+  rm -rf "${_DIR}/tmp"
+fi
+
 source "${_DIR}/../_lib.sh"
 
 D="git@github.com:tmp__repo.git"
 
-socket_server key-one
+ssenc_build
+encoder_start key-one
 
 project repo "git@github.com:tmp/repo.git"
 cd repo
@@ -73,18 +83,37 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "after push"
 
-COMMAND='stored "${D}/.env" | has "#ssenc1 fake key=key-one" "B=2"'
-EXPECTED_STDOUT="#ssenc1 fake key=key-one"
+COMMAND='stored "${D}/.env" | has "#ssenc1" "#seal" "B=2"'
+EXPECTED_STDOUT="#ssenc1
+#seal"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "stored .env is the output of the encoder, no plain text in it"
 
-COMMAND='stored "${D}/plain.txt"; stored "${D}/sub dir/${WEIRD}" | has "#ssenc1 fake"'
+COMMAND='stored "${D}/plain.txt"; stored "${D}/sub dir/${WEIRD}" | has "#ssenc1"'
 EXPECTED_STDOUT="not a secret
-#ssenc1 fake"
+#ssenc1"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "stored plain.txt is plain, file with a quote and a space in the name is encrypted"
+
+# seen from outside: the ssenc binary of submodules/encrypt opens what gits stored, with the same key
+COMMAND='ssenc decrypt --ssh-key "${WORK}/keys/key-one.pub" -i "${WORK}/look/${D}/.env"'
+EXPECTED_STDOUT="A=1
+B=2
+C=3"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "stored .env is an ordinary ssenc file: the ssenc binary decrypts it"
+
+COMMAND='ssenc inspect -i "${WORK}/look/${D}/.env" | has "\"format\":\"ssenc1\"" "\"mode\":\"lines\"" "\"seal\":true" "\"type\":\"ssh\""'
+EXPECTED_STDOUT='"format":"ssenc1"
+"mode":"lines"
+"seal":true
+"type":"ssh"'
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "stored .env: line by line, sealed, opened by an ssh key"
 
 # the plain copy made for the moment of encryption (TARGET.hash...) never reaches the storage
 COMMAND='storage "${WORK}/look" && cd "${WORK}/look" && git ls-files | has "hash"; git ls-files | wc -l | tr -d " "'
@@ -151,13 +180,23 @@ test "second push: commit"
 
 stored "${D}/.env" > "${WORK}/v2"
 
-# the existing stored file is the "previous version" for the encoder: only the edited line differs
-COMMAND='{ diff "${WORK}/v1" "${WORK}/v2" || true; } | grep -c "^[<>]"; git -C "${WORK}/look" show --stat --format= HEAD | grep -c "|"'
-EXPECTED_STDOUT="2
+# the existing stored file is the "previous version" for the encoder: only the edited line differs,
+# and the #seal line (--seal: one line which covers the whole file) - 2 lines, each as "<" and as ">"
+COMMAND='{ diff "${WORK}/v1" "${WORK}/v2" || true; } | grep -c "^[<>]"; { diff "${WORK}/v1" "${WORK}/v2" || true; } | grep -c "^[<>] #seal"; git -C "${WORK}/look" show --stat --format= HEAD | grep -c "|"'
+EXPECTED_STDOUT="4
+2
 1"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "only the edited line changed in the stored file, only .env is in the second commit"
+
+COMMAND='ssenc decrypt --ssh-key "${WORK}/keys/key-one.pub" -i "${WORK}/v2"'
+EXPECTED_STDOUT="A=1
+B=22
+C=3"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "second push: the ssenc binary decrypts the new version"
 
 # ---------- pull decrypts ----------
 
@@ -231,7 +270,7 @@ test "nothing was pushed without the encoder, nothing left behind"
 
 # ---------- the encoder has another key: nothing is decrypted, nothing is overwritten, nothing is pushed ----------
 
-socket_server key-two
+encoder_start key-two
 printf 'local edit\n' > .env
 
 F1="can't decrypt '${D}/.env': AUTH"
@@ -269,7 +308,7 @@ test "wrong key, push: nothing pushed, nothing left behind"
 
 printf 'A=1\nB=22\nC=3\n' > .env
 
-socket_server key-one
+encoder_start key-one
 
 COMMAND='gits isinsync'
 EXPECTED_STDOUT=""
@@ -290,9 +329,9 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "plain -> encrypted, diff: note"
 
-COMMAND='gits push --yes > /dev/null 2>&1; echo "${?}"; stored "${D}/plain.txt" | has "#ssenc1 fake" "not a secret"'
+COMMAND='gits push --yes > /dev/null 2>&1; echo "${?}"; stored "${D}/plain.txt" | has "#ssenc1" "not a secret"'
 EXPECTED_STDOUT="0
-#ssenc1 fake"
+#ssenc1"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "plain -> encrypted, push: stored encrypted now"
@@ -324,9 +363,9 @@ test "encrypted -> plain: in sync after push"
 
 sed -i.bak 's|"gits.sh::|"gits.sh:e:|' .git/gits.sh && rm .git/gits.sh.bak
 
-COMMAND='gits push --yes > /dev/null 2>&1; echo "${?}"; stored "${D}/gits.sh" | has "#ssenc1 fake" "GITSTORAGELIST"'
+COMMAND='gits push --yes > /dev/null 2>&1; echo "${?}"; stored "${D}/gits.sh" | has "#ssenc1" "GITSTORAGELIST"'
 EXPECTED_STDOUT="0
-#ssenc1 fake"
+#ssenc1"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "encrypted config in the storage"

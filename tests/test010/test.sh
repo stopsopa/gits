@@ -24,6 +24,12 @@ case ${_SHELL} in
     ;;
 esac
 
+# what the previous run left (kept after the test to look at it, ignored by git: .gitignore next to this file)
+if [[ -d "${_DIR}/tmp" ]]; then
+  chmod -R u+w "${_DIR}/tmp"
+  rm -rf "${_DIR}/tmp"
+fi
+
 source "${_DIR}/../_lib.sh"
 
 mkdir ws
@@ -46,7 +52,7 @@ GITSTORAGELIST=(
     "../file.txt::\$GITSTORAGETARGETDIR/file.txt"
 )
 touch "${WORK}/slow-config-started"
-sleep 30
+sleep 3
 EEE
 
 project third "git@github.com:tmp/third.git"
@@ -59,6 +65,9 @@ set -m
 gits state > "${LOG}" 2>&1 &
 PID="${!}"
 set +m
+echo "${LOG}"
+    # printf "\n      Press Enter to continue\n"
+    # read
 
 for I in $(seq 1 200); do
   [[ -f "${WORK}/slow-config-started" ]] && break

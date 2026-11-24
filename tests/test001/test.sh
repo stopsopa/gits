@@ -21,6 +21,12 @@ case ${_SHELL} in
     ;;
 esac
 
+# what the previous run left (kept after the test to look at it, ignored by git: .gitignore next to this file)
+if [[ -d "${_DIR}/tmp" ]]; then
+  chmod -R u+w "${_DIR}/tmp"
+  rm -rf "${_DIR}/tmp"
+fi
+
 source "${_DIR}/../_lib.sh"
 
 STORAGE="${GITSTORAGESOURCE}"

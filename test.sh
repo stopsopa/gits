@@ -19,10 +19,12 @@
 # test004   state, find
 # test005   migrate, migrate all, automatic migration
 # test006   add
-# test007   encrypted elements (SOURCE:e:TARGET) through GITSTORAGETENCRYPTIONSOCKET
+# test007   encrypted elements (SOURCE:e:TARGET) through GITSTORAGETENCRYPTIONSOCKET,
+#           with the real encoder process and the ssenc binary of submodules/encrypt
 # test008   init with a template, url, move, GITSTORAGETESHELL
 # test009   --update (slow: compiles gits three times)
 # test010   Ctrl+C removes the temporary clone
+# test011   tests/encoder/encoder-start.sh, tests/encoder/encoder-stop.sh, the wrapper gits.sh
 #
 
 CODE=0
@@ -114,6 +116,14 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test010/test.sh || CODE=1
+
+cat <<EEE
+
+=============== tests/test011/test.sh ===============
+
+EEE
+
+/bin/bash tests/test011/test.sh || CODE=1
 
 if [[ "${CODE}" = "0" ]]; then
   cat <<EEE

@@ -1,0 +1,2 @@
+# everything test.sh produces: it is cleared at the beginning of the test, not at its end
+/tmp/
