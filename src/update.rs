@@ -2,8 +2,8 @@ use std::fs;
 use std::io::{IsTerminal, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 
+use crate::cli::{cli, Options};
 use crate::util::{download, env, expand_tilde, is_url};
 use crate::VERSION;
 
@@ -79,16 +79,8 @@ pub fn sum_for(sums: &str, name: &str) -> Option<String> {
 }
 
 fn output_of(program: &str, args: &[&str]) -> Option<(bool, String, String)> {
-    let out = Command::new(program)
-        .args(args)
-        .stdin(Stdio::null())
-        .output()
-        .ok()?;
-    Some((
-        out.status.success(),
-        String::from_utf8_lossy(&out.stdout).to_string(),
-        String::from_utf8_lossy(&out.stderr).to_string(),
-    ))
+    let out = cli(program, args, Options::new()).ok()?;
+    Some((out.success(), out.stdout_text(), out.stderr_text()))
 }
 
 /**
@@ -174,19 +166,16 @@ fn sha256(file: &Path) -> Result<String, String> {
 // the binary is really executed: a checksum doesn't prove that it runs on this machine
 fn reports(binary: &Path, tag: &str) -> Result<(), String> {
     let expected = format!("gits {tag}");
-    let out = Command::new(binary)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .output()
+    let out = cli(binary, ["--version"], Options::new())
         .map_err(|e| format!(">{}< can't be executed: {e}", binary.display()))?;
-    let got = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if out.status.success() && got == expected {
+    let got = out.stdout_text().trim().to_string();
+    if out.success() && got == expected {
         Ok(())
     } else {
         Err(format!(
             ">{} --version< should print >{expected}<, it printed >{got}< ({})",
             binary.display(),
-            out.status
+            out.status()
         ))
     }
 }

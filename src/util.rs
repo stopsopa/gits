@@ -1,7 +1,7 @@
+use crate::cli::{cli, Options};
 use std::fs;
 use std::io::{IsTerminal, Read};
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
@@ -167,46 +167,50 @@ pub fn copy_file(from: &Path, to: &Path) -> Result<(), String> {
 }
 
 /**
- * git with output passed through to the user.
+ * git with output passed through to the user while it flows.
  * quiet: stdout dropped, stderr stays (errors are always worth seeing).
+ *
+ * git doesn't write to the terminal directly (see cli.rs), so it would never use colors by
+ * itself: when gits prints to a terminal, git is told to use them.
  */
 pub fn git(cwd: &Path, args: &[&str], quiet: bool) -> Result<(), String> {
-    let mut cmd = Command::new("git");
-    cmd.args(args).current_dir(cwd).stdin(Stdio::null());
-    if quiet {
-        cmd.stdout(Stdio::null());
+    let mut all: Vec<&str> = Vec::new();
+    if !quiet && colors() {
+        all.extend_from_slice(&["-c", "color.ui=always"]);
     }
-    let status = cmd
-        .status()
-        .map_err(|e| format!("can't run git (is it installed?): {e}"))?;
-    if status.success() {
+    all.extend_from_slice(args);
+
+    let options = if quiet {
+        Options::new().pwd(cwd).forward_stderr()
+    } else {
+        Options::new().pwd(cwd).forward()
+    };
+    let out =
+        cli("git", &all, options).map_err(|e| format!("can't run git (is it installed?): {e}"))?;
+    if out.success() {
         Ok(())
     } else {
         Err(format!(
-            "git {} failed in >{}< ({status})",
+            "git {} failed in >{}< ({})",
             args.join(" "),
-            cwd.display()
+            cwd.display(),
+            out.status()
         ))
     }
 }
 
 // git with stdout captured (trimmed at the end), stderr dropped
 pub fn git_out(cwd: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output()
+    let out = cli("git", args, Options::new().pwd(cwd))
         .map_err(|e| format!("can't run git (is it installed?): {e}"))?;
-    if !out.status.success() {
+    if !out.success() {
         return Err(format!(
             "git {} failed in >{}<",
             args.join(" "),
             cwd.display()
         ));
     }
-    Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
+    Ok(out.stdout_text().trim_end().to_string())
 }
 
 pub fn is_url(source: &str) -> bool {
@@ -218,19 +222,12 @@ pub fn download(url: &str) -> Result<Vec<u8>, String> {
     let attempts: [(&str, &[&str]); 2] = [("curl", &["-fsSL"]), ("wget", &["-q", "-O", "-"])];
     let mut last = String::from("neither curl nor wget found");
     for (program, args) in attempts {
-        let out = Command::new(program)
-            .args(args)
-            .arg(url)
-            .stdin(Stdio::null())
-            .stderr(Stdio::piped())
-            .output();
-        match out {
-            Ok(o) if o.status.success() && !o.stdout.is_empty() => return Ok(o.stdout),
+        let mut all: Vec<&str> = args.to_vec();
+        all.push(url);
+        match cli(program, &all, Options::new()) {
+            Ok(o) if o.success() && !o.stdout.is_empty() => return Ok(o.stdout),
             Ok(o) => {
-                last = format!(
-                    "{program} failed for >{url}<: {}",
-                    String::from_utf8_lossy(&o.stderr).trim()
-                );
+                last = format!("{program} failed for >{url}<: {}", o.stderr_text().trim());
                 // the program exists and answered, the other one would say the same
                 break;
             }

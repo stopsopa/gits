@@ -155,6 +155,7 @@ repository as the storage (`tests/_lib.sh`, also the helpers used in the command
 | `src/config.rs` | reading `.git/gits.sh`, migration, finding projects |
 | `src/ops.rs` | the temporary clone, `diff`, `isinsync`, `push`, `pull`, `state`, `url` |
 | `src/commands.rs` | `init`, `add`, `find`, `migrate`, `move` |
+| `src/cli.rs` | the only place where other programs are started (git, the shell reading the config, curl...): env, working directory, output forwarded while it flows and collected. Rust version of `workshop/cli/cli.ts` |
 | `src/socket.rs` | client of the encoder process |
 | `src/update.rs` | `--update` |
 | `.github/workflows/rust.yml` | test -> build (macOS arm64, Linux x64, Linux arm64) -> release on a tag |

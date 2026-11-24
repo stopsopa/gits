@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, Stdio};
 
+use crate::cli::{cli, Options};
 use crate::util::{absolute, expand_tilde, git_out, random_hex, yellow};
 
 pub const GIT_DIR: &str = ".git";
@@ -151,29 +151,26 @@ printf '\n%s\n' "$2"
 printf '%s\0' "$GITSTORAGETARGETDIR" "${GITSTORAGELIST[@]}"
 "#;
     let shell = shell();
-    let out = Command::new(&shell)
-        .arg("-c")
-        .arg(script)
-        .arg("gits")
-        .arg(format!("{GIT_DIR}/{CONFIG}"))
-        .arg(&marker)
-        .current_dir(&dir)
-        .stdin(Stdio::null())
-        .stderr(Stdio::inherit())
-        .output()
-        .map_err(|e| {
-            format!(
-                "can't run shell {ENV_SHELL}=>{shell}< to read >{}<: {e}",
-                config.display()
-            )
-        })?;
+    // what the config prints on stderr is shown at once, its stdout is needed here
+    let config_file = format!("{GIT_DIR}/{CONFIG}");
+    let out = cli(
+        &shell,
+        ["-c", script, "gits", &config_file, &marker],
+        Options::new().pwd(&dir).forward_stderr(),
+    )
+    .map_err(|e| {
+        format!(
+            "can't run shell {ENV_SHELL}=>{shell}< to read >{}<: {e}",
+            config.display()
+        )
+    })?;
 
     let needle = format!("\n{marker}\n");
     let at = rfind(&out.stdout, needle.as_bytes()).ok_or_else(|| {
         format!(
             "config >{}< executed with >{shell}< didn't run to its end ({}), does it call exit?",
             config.display(),
-            out.status
+            out.status()
         )
     })?;
 

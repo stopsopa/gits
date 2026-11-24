@@ -307,9 +307,18 @@ set -e
       command: `
 set -e
 
+LOG="var/log_\$(date +%Y-%m-%d_%H-%M-%S).log"
+
 /bin/bash compile.sh
 
-/bin/bash test.sh
+/bin/bash test.sh 2>&1 | tee "\${LOG}"
+
+
+cat <<EEE
+
+      log: \${LOG}
+
+EEE
 `,
       description: `compile + cargo test + tests/test*/test.sh`,
       confirm: false,

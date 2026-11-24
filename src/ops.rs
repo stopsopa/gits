@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::cli::{cli, Options};
 use crate::config::{self, Project};
 use crate::socket::Lazy;
 use crate::util::{
@@ -100,14 +101,9 @@ impl Storage {
         args.push(".");
         let cloned = if quiet {
             // isinsync: also the chatter of git on stderr is unwanted, it is shown only when the clone fails
-            match std::process::Command::new("git")
-                .args(&args)
-                .current_dir(dest)
-                .stdin(std::process::Stdio::null())
-                .output()
-            {
-                Ok(out) if out.status.success() => Ok(()),
-                Ok(out) => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),
+            match cli("git", &args, Options::new().pwd(dest)) {
+                Ok(out) if out.success() => Ok(()),
+                Ok(out) => Err(out.stderr_text().trim().to_string()),
                 Err(e) => Err(format!("can't run git (is it installed?): {e}")),
             }
         } else {

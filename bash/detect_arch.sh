@@ -44,3 +44,4 @@ case "${OS}" in
 esac
 
 GITS_BIN_PATH="${_ROOT_DIR}/bin/${ARCH_DIR}/gits"
+echo "detect_arch.sh GITS_BIN_PATH=>${GITS_BIN_PATH}<"
