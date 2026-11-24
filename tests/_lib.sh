@@ -13,6 +13,8 @@
 #   EXPECTED_CODE="0"
 #   test "diff in sync"
 #
+# All four (COMMAND, EXPECTED_STDOUT, EXPECTED_STDERR, EXPECTED_CODE) are required before every "test",
+# they are unset after it. stdin of COMMAND is /dev/null.
 # COMMAND is executed by eval in a subshell: variables and functions of the test are visible in it
 # (so write it in single quotes and let it expand there), but "cd" or "export" made inside of it
 # are gone after the test - do such things between the tests.
@@ -79,14 +81,16 @@ source "${_ROOT}/bash/test.sh" "${0}"
 set -o pipefail
 
 # the library registers "trap test_result EXIT", here the same and the cleaning before it
+# (exit code of the script is taken first and passed, test_result can't see it after the cleaning)
 function _lib_exit {
+  local CODE="${?}"
   if [[ -n "${SOCKET_SERVER_PID}" ]]; then
     kill "${SOCKET_SERVER_PID}" 2> /dev/null
     wait "${SOCKET_SERVER_PID}" 2> /dev/null
   fi
   cd /
   rm -rf "${WORK}"
-  test_result
+  test_result "${CODE}"
 }
 
 trap _lib_exit EXIT
