@@ -84,7 +84,7 @@ cat <<EEE
   xx test                  compile + unit tests + tests/test*/test.sh
   xx publish               new tag (patch / minor / major) pushed: github actions build and publish the release
                            (before it: section "## <new tag>" in changelog.md)
-  xx "release notes preview" v0.1.0
+  xx "release notes preview" v1.0.0
                            the body of the release page for that tag, without releasing
 
   xx "submodule add"       once, ever        register the submodules and commit the result
@@ -344,7 +344,7 @@ cp bin/*/gits "\${TMP}/gits-local-build"
 
 rm -rf "\${TMP:?}"
 `,
-      description: `print the body of the github release page. Optional argument: tag, to see its section of changelog.md, e.g. xx "release notes preview" v0.1.0`,
+      description: `print the body of the github release page. Optional argument: tag, to see its section of changelog.md, e.g. xx "release notes preview" v1.0.0`,
       confirm: false,
     },
     [`publish`]: {

@@ -18,12 +18,19 @@ on:
 permissions:
   contents: read
 
+# Every job is stopped after 3 minutes (timeout-minutes of each job): a run can never burn
+# more than that per job, whatever hangs. A newer push to the same branch cancels the run
+# of the older one. Tags are never cancelled: each one is a release.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
 jobs:
   test:
     name: Test on Linux x64
     runs-on: ubuntu-latest
     # a test which hangs must not burn minutes: the whole job is stopped
-    timeout-minutes: 10
+    timeout-minutes: 3
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -80,14 +87,14 @@ jobs:
 
       # the step which can hang (a process waiting for something which never comes)
       - name: Run unit and E2E tests
-        timeout-minutes: 5
+        timeout-minutes: 3
         run: /bin/bash test.sh
 
   build-matrix:
     name: Build ${{ matrix.target }}
     needs: test
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 3
     strategy:
       matrix:
         # artifact_name: the same names src/update.rs looks for (fn asset)

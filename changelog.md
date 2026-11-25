@@ -4,7 +4,7 @@ Each release has its own `## vX.Y.Z` section. The release workflow copies the se
 
 The longer story of every change, with the reasons: [CHANGES.md](CHANGES.md).
 
-## v0.1.0
+## v1.0.0
 
 - **All variables are `GITS_*`** (was `GITSTORAGE*`): `GITS_SOURCE`, `GITS_SHELL`, `GITS_ENCRYPTION_SOCKET`, `GITS_TEMPLATE`, and in the config `GITS_TARGETDIR`, `GITS_LIST`. The old names are still read when the new one is not defined; `gits migrate` renames the two variables inside a config.
 - **Lifecycle events**: your scripts run between the stages of every command. `GITS_<COMMAND>_<EVENT>`, `GITS_<COMMAND>_ALL`, `GITS_ALL` hold the path of a script, in the environment or in `.git/gits.sh`. `gits events` lists them, `gits events --examples <directory>` writes an example of each. See `LIFECYCLE.md`.

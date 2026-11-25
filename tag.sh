@@ -10,7 +10,21 @@
 # Before it: add section "## <new tag>" to changelog.md, it becomes the top of the release page
 # (preview: xx "release notes preview" <new tag>).
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+_SHELL="$(ps -p $$ -o comm=)"; # bash || sh || zsh
+_SHELL="$(basename ${_SHELL//-/})"
+case ${_SHELL} in
+  zsh)
+    _DIR="$( cd "$( dirname "${(%):-%x}" )" && pwd -P )"
+    ;;
+  sh)
+    # be carefull this will not work when sourcing this file in sh shell
+    # will though work when called /bin/sh my_script.sh from any shell
+    _DIR="$( cd "$( dirname "${0}" )" && pwd -P )"
+    ;;
+  *)
+    _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P )"
+    ;;
+esac
 
 GRAY=$'\033[38;5;244m'
 GREEN=$'\033[32m'
@@ -23,7 +37,7 @@ MODE="${1}"
 
 # no argument: choose from the list
 if [[ -z "${MODE}" ]]; then
-  MODE="$(printf "patch\nminor\nmajor\n" | NODE_OPTIONS= node "${DIR}/bash/file/fuzzy.ts")"
+  MODE="$(printf "patch\nminor\nmajor\n" | NODE_OPTIONS= node "${_DIR}/bash/file/fuzzy.ts")"
   if [[ "${?}" -ne 0 || -z "${MODE}" ]]; then
     echo "${0} error: no mode selected"
     exit 1
@@ -45,13 +59,75 @@ EEE
   exit 1
 fi
 
-cd "${DIR}" || exit 1
+cd "${_DIR}" || exit 1
 
 echo "${GRAY}Fetching git tags...${RESET}"
-git fetch --tags || {
-  echo "${0} error: git fetch --tags failed"
-  exit 1
-}
+FETCH_OUTPUT="$(git fetch --tags 2>&1)"
+FETCH_CODE="${?}"
+echo "${FETCH_OUTPUT}"
+
+if [[ "${FETCH_CODE}" -ne 0 ]]; then
+
+  # Tags which exist locally and on origin but point to different commits. Usually after rewriting
+  # history (git filter-branch, rebase): local tag was moved to the new commit, origin still has the old one.
+  CLOBBERED="$(echo "${FETCH_OUTPUT}" | sed -nE 's/^ ! \[rejected\] +([^ ]+) +-> .*\(would clobber existing tag\)$/\1/p')"
+
+  if [[ -z "${CLOBBERED}" ]]; then
+    echo "${0} error: git fetch --tags failed"
+    exit 1
+  fi
+
+  TAGS_LIST=""
+  TAGS_ARGS=()
+  while IFS= read -r TAG; do
+    LOCAL_COMMIT="$(git rev-parse --short "${TAG}^{commit}" 2> /dev/null)"
+    # for annotated tag the second line (^{}) is the commit, for lightweight tag there is only one line
+    REMOTE_COMMIT="$(git ls-remote --tags origin "refs/tags/${TAG}" "refs/tags/${TAG}^{}" | tail -n 1 | cut -c1-7)"
+    TAGS_LIST="${TAGS_LIST}  ${TAG}   local: ${LOCAL_COMMIT}   origin: ${REMOTE_COMMIT}"$'\n'
+    TAGS_ARGS+=("${TAG}")
+  done <<< "${CLOBBERED}"
+
+  cat <<EEE
+${YELLOW}
+Tags below point to different commit locally than on origin:
+${RESET}
+${TAGS_LIST}
+${YELLOW}It usually happens after rewriting history (git filter-branch, rebase): local tag was moved to
+the new commit, but origin still has the old one. Two ways to fix it:${RESET}
+
+  ${CYAN}local${RESET}   git push --force origin ${TAGS_ARGS[*]}
+          origin gets local tags - pick it if you rewrote the history on purpose.
+          Pushed tag starts the release again for that tag.
+
+  ${CYAN}remote${RESET}  git fetch --tags --force
+          local tags are replaced with those from origin, nothing is pushed, no release.
+          Tag stays on the old commit (old history is still reachable on origin through it).
+
+EEE
+
+  FIX="$(printf "local\nremote\nabort\n" | NODE_OPTIONS= node "${_DIR}/bash/file/fuzzy.ts")"
+
+  if [[ "${FIX}" == "local" ]]; then
+    git push --force origin "${TAGS_ARGS[@]}" || {
+      echo "${0} error: git push --force origin ${TAGS_ARGS[*]} failed"
+      exit 1
+    }
+  elif [[ "${FIX}" == "remote" ]]; then
+    git fetch --tags --force || {
+      echo "${0} error: git fetch --tags --force failed"
+      exit 1
+    }
+  else
+    echo "${0} error: git fetch --tags failed, tags >${TAGS_ARGS[*]}< differ between local and origin, nothing was changed"
+    exit 1
+  fi
+
+  # now it has to pass
+  git fetch --tags || {
+    echo "${0} error: git fetch --tags still fails after fix >${FIX}<"
+    exit 1
+  }
+fi
 
 LATEST_TAG="$(git tag -l --sort=v:refname | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | tail -n 1)"
 
@@ -107,7 +183,7 @@ if [[ -z "$(git branch -r --contains HEAD 2> /dev/null)" ]]; then
   echo "${YELLOW}warning: current commit is not pushed to any remote branch (the tag will be pushed with it anyway)${RESET}"
 fi
 
-if ! grep -q "^## ${NEW_TAG}\$" "${DIR}/changelog.md" 2> /dev/null; then
+if ! grep -q "^## ${NEW_TAG}\$" "${_DIR}/changelog.md" 2> /dev/null; then
   echo "${YELLOW}warning: no section '## ${NEW_TAG}' in changelog.md, release page will have no description of changes${RESET}"
 fi
 

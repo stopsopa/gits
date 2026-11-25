@@ -33,6 +33,12 @@ GITSTORAGELIST=(
     "links.sh::$GITSTORAGETARGETDIR/links.sh"
     "xx.cjs::${GITSTORAGETARGETDIR}/xx.cjs"
 
+    "~/.claude/settings.json::$GITSTORAGETARGETDIR/.claude/settings.json"
+    "~/.agents/.skill-lock.json::$GITSTORAGETARGETDIR/.agents/.skill-lock.json"
+    "~/.agents/.skill-lock.json::$GITSTORAGETARGETDIR/.agents/.skill-lock.json"
+    "~/Workspace/.vscode/settings.json::$GITSTORAGETARGETDIR/vscode/.vscode/settings.json"
+    "~/Workspace/SPECIAL_storage/.vscode/settings.json::$GITSTORAGETARGETDIR/Workspace/SPECIAL_storage/.vscode/settings.json"
+
     # standalone vscode README.md for all envs
     "~/Workspace/vscode/README.md::$GITSTORAGETARGETDIR/vscode/README.md"
     "~/Workspace/vscode/.gitignore::$GITSTORAGETARGETDIR/vscode/.gitignore"
@@ -144,10 +150,6 @@ GITSTORAGELIST=(
     "../../szm114_root/Users/szdz/.pi/agent/settings.json::$GITSTORAGETARGETDIR/szm114_root/.pi/agent/settings.json"
     "../../szm114_root/Users/szdz/.pi/agent/keybindings.json::$GITSTORAGETARGETDIR/szm114_root/.pi/agent/keybindings.json"
     "../../szm114_root/Users/szdz/.pi/agent/auth.json::$GITSTORAGETARGETDIR/szm114_root/.pi/agent/auth.json"
-    "../../szm114_root/Users/szdz/.claude/settings.json::$GITSTORAGETARGETDIR/szm114_root/.claude/settings.json"
-
-
-    "../../szm114_root/Users/szdz/.agents/.skill-lock.json::$GITSTORAGETARGETDIR/szm114_root/.agents/.skill-lock.json"
 )
 
 
