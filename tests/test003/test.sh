@@ -15,9 +15,11 @@
 #      place, creating missing directories (also in home); afterwards the project is in sync
 #   4. a change pushed from "one" is seen by diff in "two" and arrives with pull --yes
 #   5. pull overwrites a local edit
-#   6. an element of the list which doesn't exist in the storage: pull says so, creates nothing for it
-#      and still ends with exit code 0; and because the config is in the list too, pull replaces the
-#      edited config with the stored one
+#   6. a local config which differs from the stored one: pull takes the stored config first,
+#      reads the list again and only then copies the files
+#   7. a config which doesn't store itself, with an element which doesn't exist in the storage:
+#      pull says so, creates nothing for it and still ends with exit code 0
+#   8. the list grew on "one" (new file + config pushed): ONE pull on "two" brings the new file
 #
 # Needs: the compiled binary (/bin/bash compile.sh).
 #
@@ -209,8 +211,44 @@ cat <<EEE >> .git/gits.sh
 GITSTORAGELIST+=("../new.txt::\$GITSTORAGETARGETDIR/new.txt")
 EEE
 
+# The config is an element of its own list, and pull takes the config first: the stored one is
+# different (it has no new.txt), so it replaces the edited one and the list is read again.
+# With the stored list there is nothing about new.txt left: no message about a missing file.
+COMMAND='gits pull --yes 2>&1 | has "was different in the storage: it was pulled first and the list is read again" "new.txt"'
+EXPECTED_STDOUT="was different in the storage: it was pulled first and the list is read again"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "pull with a local config which differs from the stored one: the stored config is pulled first"
+
+# no new.txt appeared (no empty file was created for the element which is not stored)
+COMMAND='listing'
+EXPECTED_STDOUT=".git deep test.txt"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "nothing was created for it"
+
+# pull overwrote the edited config with the stored one: "new.txt" is gone from it
+# (asked for, not expected), "test.txt" is still there.
+COMMAND='cat .git/gits.sh | has "new.txt" "test.txt"'
+EXPECTED_STDOUT="test.txt"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "pull restored the config too"
+
+# ---------- a config which doesn't store itself: an element the storage knows nothing about ----------
+
+# This config is not in its own list, so pull has no stored config to take first and works with
+# the local list as it is. new.txt was never pushed: the storage has nothing at its TARGET.
+cat <<EEE > .git/gits.sh
+GITSTORAGETARGETDIR="${D}"
+GITSTORAGELIST=(
+    "../test.txt::\$GITSTORAGETARGETDIR/test.txt"
+    "../new.txt::\$GITSTORAGETARGETDIR/new.txt"
+)
+EEE
+
 # pull says that this file is not in the storage and carries on with the rest: exit code 0.
-COMMAND='gits pull --yes 2>&1 | has "file '"'"'${D}/new.txt'"'"' doesn'"'"'t exist in the storage"'
+COMMAND='gits pull --yes 2>&1 | has "file '"'"'${D}/new.txt'"'"' doesn'"'"'t exist in the storage" "read again"'
 EXPECTED_STDOUT="file '${D}/new.txt' doesn't exist in the storage"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
@@ -221,12 +259,29 @@ COMMAND='listing'
 EXPECTED_STDOUT=".git deep test.txt"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
-test "nothing was created for it"
+test "nothing was created for the element missing in the storage"
 
-# The config is an element of the list like any other, so pull overwrote the edited config with
-# the stored one: "new.txt" is gone from it (asked for, not expected), "test.txt" is still there.
-COMMAND='cat .git/gits.sh | has "new.txt" "test.txt"'
-EXPECTED_STDOUT="test.txt"
+# ---------- the list grew on the first machine: one pull on the second brings the new file ----------
+
+# back to the stored config (the one which stores itself)
+cp ../one/.git/gits.sh .git/gits.sh
+
+# on "one": a new file, registered in the config, both pushed
+cd ../one
+echo 'added later' > later.txt
+cat <<EEE >> .git/gits.sh
+GITSTORAGELIST+=("../later.txt::\$GITSTORAGETARGETDIR/later.txt")
+EEE
+gits push --yes > /dev/null 2>&1 || fail "push of the new element from the first machine failed"
+cd ../two
+
+# "two" still has the old list. One pull is enough: the config comes first, the list is read
+# again, and later.txt (which only the new list knows) is copied in the same run.
+COMMAND='gits pull --yes 2>&1 | has "the list is read again" "'"'"'${D}/later.txt'"'"' -> '"'"'../later.txt'"'"'"; cat later.txt; gits isinsync; echo "isinsync: ${?}"'
+EXPECTED_STDOUT="the list is read again
+'${D}/later.txt' -> '../later.txt'
+added later
+isinsync: 0"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
-test "pull restored the config too"
+test "one pull after the list grew on the other machine: the new file arrives, in sync"

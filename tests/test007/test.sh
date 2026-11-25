@@ -564,3 +564,22 @@ C=3"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "pull on the other machine"
+
+# ---------- an element becomes encrypted on one machine: one pull on the other, never ciphertext in a local file ----------
+
+# On "repo" plain.txt is switched from "::" to ":e:" and pushed: stored encrypted from now on.
+cd ../repo
+sed -i.bak 's|"../plain.txt::|"../plain.txt:e:|' .git/gits.sh && rm .git/gits.sh.bak
+gits push --yes > /dev/null 2>&1 || fail "push of plain.txt as encrypted failed"
+cd ../two
+
+# "two" still has the old config, where plain.txt is "::". Pulling with that list would copy the
+# encrypted stored file over the local plain.txt as it is. pull takes the config first and reads
+# the list again, so plain.txt is decrypted: the local file is plain text, and the project is in sync.
+COMMAND='gits pull --yes 2>&1 | has "the list is read again"; cat plain.txt; gits isinsync; echo "isinsync: ${?}"'
+EXPECTED_STDOUT="the list is read again
+not a secret
+isinsync: 0"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "element became encrypted on the other machine: one pull, the local file is plain text"

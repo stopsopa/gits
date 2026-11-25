@@ -82,6 +82,7 @@ cat <<EEE
 
   xx compile               build bin/<arch>/gits
   xx test                  compile + unit tests + tests/test*/test.sh
+  xx publish               new tag (patch / minor / major) pushed: github actions build and publish the release
 
   xx "submodule add"       once, ever        register the submodules and commit the result
   xx "submodule install"   once per clone    download the submodules at the pinned commits
@@ -321,6 +322,14 @@ cat <<EEE
 EEE
 `,
       description: `compile + cargo test + tests/test*/test.sh`,
+      confirm: false,
+    },
+    [`publish`]: {
+      command: `
+set -e
+/bin/bash tag.sh "\$@"
+`,
+      description: `create and push new tag (choose patch / minor / major, or: xx publish patch), github actions will build and publish the release`,
       confirm: false,
     },
     ...setup,

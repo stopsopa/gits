@@ -1,6 +1,7 @@
 # Creates and pushes the next version tag. The pushed tag starts the release
 # (.github/workflows/rust.yml), and the tag is the version of the released binaries.
 #
+#   /bin/bash tag.sh           choose patch / minor / major from a list (needs node)
 #   /bin/bash tag.sh patch     x.y.Z+1
 #   /bin/bash tag.sh minor     x.Y+1.0
 #   /bin/bash tag.sh major     X+1.0.0
@@ -15,6 +16,15 @@ BOLD=$'\033[1m'
 RESET=$'\033[0m'
 
 MODE="${1}"
+
+# no argument: choose from the list
+if [[ -z "${MODE}" ]]; then
+  MODE="$(printf "patch\nminor\nmajor\n" | NODE_OPTIONS= node "${DIR}/bash/file/fuzzy.ts")"
+  if [[ "${?}" -ne 0 || -z "${MODE}" ]]; then
+    echo "${0} error: no mode selected"
+    exit 1
+  fi
+fi
 
 if [[ "${MODE}" != "patch" && "${MODE}" != "minor" && "${MODE}" != "major" ]]; then
   cat <<EEE

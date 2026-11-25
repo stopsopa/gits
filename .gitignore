@@ -4,3 +4,6 @@
 
 # everything the examples generate (socket, log, compiled client)
 /examples/wait/tmp/
+
+# examples/SUMMARY.md: everything its commands create
+/s/

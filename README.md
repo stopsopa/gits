@@ -103,6 +103,8 @@ to the process listening there, which is the encoder of
   (`TARGET.hash<random>`), encrypted over the existing TARGET (so only the edited lines change in the
   stored file) and the copy is removed.
 - `pull --yes`: decrypted next to the stored file, then copied over SOURCE. A failed decryption never touches the local file.
+  The config is pulled first: when the stored one differs from the local one the list is read again before any
+  other file is copied, so a file another machine marked `:e:` is never copied over the local one encrypted.
 - An element changed from `::` to `:e:` (or back) is converted by the next `gits push --yes`.
 
 ### Keeping the encoder process running

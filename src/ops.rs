@@ -594,61 +594,102 @@ pub fn push(ctx: &Ctx, yes: bool) -> Result<i32, String> {
     Ok(0)
 }
 
+/**
+ * One element of pull: TARGET in the clone -> SOURCE on this machine.
+ * Ok(false): the storage has no such file, nothing was done (said on stderr).
+ * Err: the file could not be decrypted or written, the local file is as it was.
+ */
+fn pull_entry(storage: &Storage, entry: &config::Entry, enc: &mut Lazy) -> Result<bool, String> {
+    let stored = storage.root.join(&entry.target);
+    if !stored.is_file() {
+        eprintln!(
+            "{}",
+            red(&format!(
+                "file '{}' doesn't exist in the storage, it might be worth to remove it from {}/{}",
+                entry.target,
+                config::GIT_DIR,
+                config::CONFIG
+            ))
+        );
+        return Ok(false);
+    }
+
+    println!(
+        "{}",
+        yellow(&format!("'{}' -> '{}'", entry.target, entry.raw_source))
+    );
+
+    if !entry.encrypted {
+        copy_file(&stored, &entry.source)?;
+        return Ok(true);
+    }
+
+    // decrypted next to the stored file first: a failed decryption never touches the local file
+    let plain = unique_sibling(&stored);
+    let decoded = enc.get()?.decode(&stored, &plain);
+    let result = match decoded {
+        Ok(()) => copy_file(&plain, &entry.source),
+        Err(e) if e.malformed() => {
+            println!(
+                "{}",
+                yellow(&format!(
+                    "'{}' is marked :e: but it is stored not encrypted, copied as it is",
+                    entry.target
+                ))
+            );
+            copy_file(&stored, &entry.source)
+        }
+        Err(e) => Err(format!("can't decrypt '{}': {e}", entry.target)),
+    };
+    let _ = fs::remove_file(&plain);
+    result.map(|_| true)
+}
+
 pub fn pull(ctx: &Ctx, yes: bool) -> Result<i32, String> {
     if !yes {
         return dry(ctx, "pull");
     }
 
-    let project = load(ctx, false)?;
+    let mut project = load(ctx, false)?;
     let temp = Temp::create(&ctx.cwd, false)?;
     let storage = Storage::clone(&ctx.source, &temp.path, false)?;
     let mut enc = Lazy::new(ctx.socket.clone());
     let mut failed = false;
 
-    for entry in &project.list {
-        let stored = storage.root.join(&entry.target);
-        if !stored.is_file() {
-            eprintln!(
+    /*
+     * The config is usually an element of its own list, and the list in the storage can be newer
+     * than the local one (another machine added a file, or changed "::" to ":e:"). Pulling with
+     * the old list would miss the new files and, worse, copy a file which is encrypted by now
+     * over the local one as it is. So the config is pulled first, and when it changed the list
+     * is read again before anything else is touched.
+     */
+    let config_file = config::config_path(&ctx.cwd);
+    let own = project
+        .list
+        .iter()
+        .position(|entry| entry.source == config_file);
+    if let Some(at) = own {
+        let before = fs::read(&config_file).ok();
+        pull_entry(&storage, &project.list[at], &mut enc)?;
+        if fs::read(&config_file).ok() != before {
+            println!(
                 "{}",
-                red(&format!(
-                    "file '{}' doesn't exist in the storage, it might be worth to remove it from {}/{}",
-                    entry.target,
+                yellow(&format!(
+                    "{}/{} was different in the storage: it was pulled first and the list is read again",
                     config::GIT_DIR,
                     config::CONFIG
                 ))
             );
+            project = load(ctx, false)?;
+        }
+    }
+
+    for entry in &project.list {
+        // already done above
+        if own.is_some() && entry.source == config_file {
             continue;
         }
-
-        println!(
-            "{}",
-            yellow(&format!("'{}' -> '{}'", entry.target, entry.raw_source))
-        );
-
-        if !entry.encrypted {
-            copy_file(&stored, &entry.source)?;
-            continue;
-        }
-
-        // decrypted next to the stored file first: a failed decryption never touches the local file
-        let plain = unique_sibling(&stored);
-        let decoded = enc.get()?.decode(&stored, &plain);
-        let result = match decoded {
-            Ok(()) => copy_file(&plain, &entry.source),
-            Err(e) if e.malformed() => {
-                println!(
-                    "{}",
-                    yellow(&format!(
-                        "'{}' is marked :e: but it is stored not encrypted, copied as it is",
-                        entry.target
-                    ))
-                );
-                copy_file(&stored, &entry.source)
-            }
-            Err(e) => Err(format!("can't decrypt '{}': {e}", entry.target)),
-        };
-        let _ = fs::remove_file(&plain);
-        if let Err(e) = result {
+        if let Err(e) = pull_entry(&storage, entry, &mut enc) {
             failed = true;
             eprintln!("{}", red(&format!("gits error: {e}")));
         }
