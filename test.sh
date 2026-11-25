@@ -34,6 +34,20 @@
 
 CODE=0
 
+# After every test: the configs left in tests/*/tmp (kept there to look at after a test) are
+# renamed: gits.sh -> _gits.sh, gitstorage-config.sh -> _gitstorage-config.sh.
+# Without it "gits state" / "gits find" called above this repository (e.g. in the home directory)
+# lists them as projects. Every test removes its tmp at the beginning, so nothing depends on them.
+function hide_configs {
+  local FILE
+  while IFS= read -r FILE; do
+    if [[ -z "${FILE}" ]]; then
+      continue
+    fi
+    mv -f "${FILE}" "$(dirname "${FILE}")/_$(basename "${FILE}")"
+  done <<< "$(find tests -type f \( -name gits.sh -o -name gitstorage-config.sh \) -path '*/tmp/*')"
+}
+
 cat <<EEE
 
 =============== cargo test ===============
@@ -50,6 +64,8 @@ EEE
 
 /bin/bash tests/test001/test.sh || CODE=1
 
+hide_configs
+
 cat <<EEE
 
 =============== tests/test002/test.sh ===============
@@ -57,6 +73,8 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test002/test.sh || CODE=1
+
+hide_configs
 
 cat <<EEE
 
@@ -66,6 +84,8 @@ EEE
 
 /bin/bash tests/test003/test.sh || CODE=1
 
+hide_configs
+
 cat <<EEE
 
 =============== tests/test004/test.sh ===============
@@ -73,6 +93,8 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test004/test.sh || CODE=1
+
+hide_configs
 
 cat <<EEE
 
@@ -82,6 +104,8 @@ EEE
 
 /bin/bash tests/test005/test.sh || CODE=1
 
+hide_configs
+
 cat <<EEE
 
 =============== tests/test006/test.sh ===============
@@ -89,6 +113,8 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test006/test.sh || CODE=1
+
+hide_configs
 
 cat <<EEE
 
@@ -98,6 +124,8 @@ EEE
 
 /bin/bash tests/test007/test.sh || CODE=1
 
+hide_configs
+
 cat <<EEE
 
 =============== tests/test008/test.sh ===============
@@ -105,6 +133,8 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test008/test.sh || CODE=1
+
+hide_configs
 
 cat <<EEE
 
@@ -114,6 +144,8 @@ EEE
 
 /bin/bash tests/test009/test.sh || CODE=1
 
+hide_configs
+
 cat <<EEE
 
 =============== tests/test010/test.sh ===============
@@ -121,6 +153,8 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test010/test.sh || CODE=1
+
+hide_configs
 
 cat <<EEE
 
@@ -130,6 +164,8 @@ EEE
 
 /bin/bash tests/test011/test.sh || CODE=1
 
+hide_configs
+
 cat <<EEE
 
 =============== tests/test012/test.sh ===============
@@ -137,6 +173,8 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test012/test.sh || CODE=1
+
+hide_configs
 
 cat <<EEE
 
@@ -146,6 +184,8 @@ EEE
 
 /bin/bash tests/test013/test.sh || CODE=1
 
+hide_configs
+
 cat <<EEE
 
 =============== tests/test014/test.sh ===============
@@ -153,6 +193,8 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test014/test.sh || CODE=1
+
+hide_configs
 
 if [[ "${CODE}" = "0" ]]; then
   cat <<EEE

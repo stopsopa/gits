@@ -44,6 +44,9 @@ In the directory with the downloaded file:
 mkdir -p ~/.gits
 mv gits ~/.gits/
 chmod 755 ~/.gits/gits
+
+# check that it runs: the help page
+~/.gits/gits --help
 ```
 
 Add two lines to the startup file of your shell. Put the url of your storage repository in place
