@@ -28,8 +28,12 @@
 #            at its beginning. Ignored by git: tests/testNNN/.gitignore
 #   HOME   - ${WORK}/home (empty: "~/..." sources and the git config of the developer can't influence the test)
 #   pwd    - ${WORK}
-#   GITSTORAGESOURCE - ${WORK}/GITSTORAGESOURCE, an empty bare repository: the storage
-#                      (bare, because a repository with a working tree refuses a push to its checked out branch)
+#   GITSTORAGESOURCE - ${WORK}/GITSTORAGESOURCE, an empty repository: the storage.
+#                      An ordinary one with a working tree (not bare), to see what the test stored
+#                      by just looking into that directory when the test ended.
+#                      A repository with a working tree refuses a push to its checked out branch,
+#                      "receive.denyCurrentBranch updateInstead" makes it accept the push and
+#                      update the files of the working tree to what was pushed
 #   all other GITSTORAGE* / GITS_* env vars unset
 #
 # git is isolated too: its global config is ${WORK}/gitconfig (identity for commits, default branch "main").
@@ -125,7 +129,8 @@ cat <<EEE > "${GIT_CONFIG_GLOBAL}"
 EEE
 
 export GITSTORAGESOURCE="${WORK}/GITSTORAGESOURCE"
-git init -q --bare "${GITSTORAGESOURCE}"
+git init -q "${GITSTORAGESOURCE}"
+git -C "${GITSTORAGESOURCE}" config receive.denyCurrentBranch updateInstead
 
 cd "${WORK}"
 

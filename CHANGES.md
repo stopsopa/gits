@@ -165,3 +165,30 @@ and then
 
 
 
+
+# gits diff: list of changed files
+
+`gits diff` (the command `gits state` prints to paste for every project which is not in sync) shows
+`git diff` and `git status` of the temporary clone and the final url at the end. The paths in that
+output are paths inside of the storage, not the files on this machine.
+
+Just above the final url print a block with the absolute paths of the local files (SOURCE) which
+differ from what is stored, one per line:
+
+```
+changed files:
+  /Users/szdz/Workspace/pull.sh
+  /Users/szdz/.agents/.skill-lock.json
+  /Users/szdz/.claude/settings.json
+
+final url https://github.com/stopsopa/gitstorage/tree/master/git@github.com:stopsopa__gitstorage.git
+```
+
+This way, when `gits diff` is executed in the terminal of vscode, ctrl + click on a path opens the file.
+
+- only the files which differ are listed (modified, or new for the storage), in the order of GITSTORAGELIST
+- the path is the SOURCE resolved on this machine (`~/` expanded, relative ones resolved from `.git`),
+  never a path in the temporary clone: that one is removed when the command ends
+- for an encrypted element (`SOURCE:e:TARGET`) it is the plain local file too
+- nothing is printed when the files are in sync
+- a source file which doesn't exist is not in the list, it is reported as an error above

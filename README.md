@@ -72,7 +72,7 @@ In the root of a project:
 | | |
 | --- | --- |
 | `gits init` | creates `.git/gits.sh`: the one from the storage when the project was set up on another machine, else from the template (`GITSTORAGETEMPLATE`, else built-in) |
-| `gits diff` | copies every SOURCE over TARGET in the clone and shows `git diff` + `git status`: `-` is what is stored, `+` what is here. Exit code 0 in sync, 1 not |
+| `gits diff` | copies every SOURCE over TARGET in the clone and shows `git diff` + `git status`: `-` is what is stored, `+` what is here. Then the list of local files which differ, with absolute paths (clickable in the terminal of an editor), and the url of the project in the storage. Exit code 0 in sync, 1 not |
 | `gits isinsync` | the same check, no output: exit code 0 in sync, 1 not in sync, 2 error |
 | `gits push --yes` | local files -> storage: commit `gits push <GITSTORAGETARGETDIR>` and push. Without `--yes` nothing is changed |
 | `gits pull --yes` | storage -> local files, **they are overwritten**. Without `--yes` nothing is changed |
@@ -183,7 +183,7 @@ somebody who controls the release.
 Every `tests/testNNN/test.sh` is a list of checks made with the function `test` of the library
 `bash/test.sh`: a command (`COMMAND`) and what it has to give (`EXPECTED_STDOUT`, `EXPECTED_STDERR`,
 `EXPECTED_CODE`). A single test can be executed alone: `/bin/bash tests/test003/test.sh`.
-Every test works in `tests/testNNN/tmp/` with its own `HOME`, git config and an empty bare
+Every test works in `tests/testNNN/tmp/` with its own `HOME`, git config and an empty
 repository as the storage (`tests/_lib.sh`, also the helpers used in the commands). That directory is
 ignored by git (`tests/testNNN/.gitignore`), cleared at the beginning of the test and left there at its
 end, to look at what the test produced.

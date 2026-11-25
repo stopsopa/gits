@@ -370,11 +370,62 @@ pub fn diff(ctx: &Ctx) -> Result<i32, String> {
             let dir = view_dir(&storage, &project);
             let _ = sgit(&dir, &["diff"], false);
             let _ = sgit(&dir, &["status"], false);
+            changed_files(&storage, &project);
             1
         }
     };
     final_url(ctx, &storage, &project);
     Ok(code)
+}
+
+/**
+ * Paths inside the storage which differ from what is stored: modified, new, deleted.
+ * "git status --porcelain -z": entries "XY <path>" separated by NUL, paths as they are (no quoting).
+ * A rename has a second entry with the old path and no "XY " in front of it, it is skipped.
+ */
+fn changed_targets(status: &str) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let mut parts = status.split('\0');
+    while let Some(part) = parts.next() {
+        if part.len() < 4 {
+            continue;
+        }
+        let (code, path) = part.split_at(3);
+        out.insert(path.to_string());
+        if code.starts_with('R') || code.starts_with('C') {
+            parts.next();
+        }
+    }
+    out
+}
+
+/**
+ * Local files (SOURCE, absolute paths) which differ from what is stored, one per line:
+ * in a terminal of an editor a path can be clicked to open the file.
+ * Printed after "git status", just above the final url.
+ */
+fn changed_files(storage: &Storage, project: &Project) {
+    let status = match sgit_out(
+        &storage.root,
+        &["status", "--porcelain", "-z", "--untracked-files=all"],
+    ) {
+        Ok(status) => status,
+        Err(_) => return,
+    };
+    let changed = changed_targets(&status);
+    let files: Vec<&config::Entry> = project
+        .list
+        .iter()
+        .filter(|entry| changed.contains(&entry.target))
+        .collect();
+    if files.is_empty() {
+        return;
+    }
+    println!("\nchanged files:");
+    for entry in files {
+        println!("  {}", entry.source.display());
+    }
+    println!();
 }
 
 // only the exit code: 0 in sync, 1 not in sync (errors are reported by the caller with 2)
@@ -721,6 +772,25 @@ pub fn state(ctx: &Ctx) -> Result<i32, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn changed_targets_of_status() {
+        let status =
+            " M d/test.txt\0 A d/sub dir/new \"file\".txt\0R  d/new.txt\0d/old.txt\0?? d/x\0";
+        let got = changed_targets(status);
+        let mut list: Vec<&str> = got.iter().map(|s| s.as_str()).collect();
+        list.sort();
+        assert_eq!(
+            list,
+            vec![
+                "d/new.txt",
+                "d/sub dir/new \"file\".txt",
+                "d/test.txt",
+                "d/x"
+            ]
+        );
+        assert!(changed_targets("").is_empty());
+    }
 
     #[test]
     fn urls() {
