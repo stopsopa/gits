@@ -24,19 +24,58 @@ by hand, command by command, in a throwaway directory: [examples/SUMMARY.md](exa
 
 ## 1. Install
 
-Download the binary of your platform from [releases](https://github.com/stopsopa/gits/releases)
-(`gits-darwin-arm64`, `gits-linux-x64`, `gits-linux-arm64`), or build it: `/bin/bash compile.sh`
-gives `bin/<arch>/gits`.
+### Download and verify
+
+Go to [GitHub Releases](https://github.com/stopsopa/gits/releases), open the release you want (the
+latest one normally) and run the block of your platform (`gits-darwin-arm64`, `gits-linux-x64`,
+`gits-linux-arm64`). It creates a new temporary directory, `cd`s into it, downloads the binary
+there as `gits` and verifies its checksum.
+
+The verification has to end with `gits: OK`. Then come back here, **in the same terminal** (you
+are in the directory with the downloaded file).
+
+Or build it instead: `/bin/bash compile.sh` gives `bin/<arch>/gits`.
+
+### Install
+
+In the directory with the downloaded file:
 
 ```sh
 mkdir -p ~/.gits
-curl -fsSL "https://github.com/stopsopa/gits/releases/latest/download/gits-darwin-arm64" -o ~/.gits/gits
-chmod +x ~/.gits/gits
+mv gits ~/.gits/
+chmod 755 ~/.gits/gits
+```
 
-# ~/.zshrc or ~/.bashrc
+Add two lines to the startup file of your shell. Put the url of your storage repository in place
+of the placeholder and run **one** of the two blocks, once: the first is for zsh (`~/.zshrc`), the
+second for bash (`~/.bashrc`):
+
+```sh
+cat <<'EEE' >> ~/.zshrc
+
+# gits - https://github.com/stopsopa/gits
 export PATH="${HOME}/.gits:${PATH}"
 export GITS_SOURCE="git@github.com:<owner>/<storage repository>.git"
+EEE
 ```
+
+```sh
+cat <<'EEE' >> ~/.bashrc
+
+# gits - https://github.com/stopsopa/gits
+export PATH="${HOME}/.gits:${PATH}"
+export GITS_SOURCE="git@github.com:<owner>/<storage repository>.git"
+EEE
+```
+
+Open a **new terminal** and check that it works, without any path:
+
+```sh
+gits --version
+gits --help
+```
+
+The file can live anywhere, `~/.gits` is only a suggestion: it only has to be found through `PATH`.
 
 `GITS_SOURCE` is the storage: a private git repository of yours, empty at the beginning. It is
 the only thing gits needs to know. Later: `gits --update`.
