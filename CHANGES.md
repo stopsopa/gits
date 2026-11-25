@@ -241,6 +241,24 @@ project) and waits:
   two apart (kitty keyboard protocol, modifyOtherKeys of xterm); for a terminal which can't:
   `ctrl+j`, `ctrl+s`
 - `q`, `esc`: nothing is written, exit code 1. `ctrl+c`: exit code 130
-- at the beginning everything is ticked; with `-e` also as encrypted
-- `--yes`, or no terminal (script, pipe): no list, everything found is added, as before
+- at the beginning everything is ticked
+- `-e`: the files are registered as encrypted elements (`SOURCE:e:TARGET`). With the list it
+  ticks `enc` of every row at the beginning, without the list it applies to every file
+- the list is shown only when stdin is a terminal: `echo "" | gits add ...` (or a script) adds
+  everything found, as before. `add` takes no `--yes`
+- paths from stdin: `find ... | gits add`, `find ... | gits add -e`. One file per line; a
+  directory in the list is skipped (not walked), empty lines are skipped, arguments are still taken
 - code: `src/menu.rs`, tests: `tests/test014` (keys pressed in a pseudo terminal by `tests/terminal.py`)
+
+# --help: every env var, three columns
+
+The table of env vars in `gits --help` lists every variable gits reacts to: its own six, the
+four names from before the rename, `HOME`, `NO_COLOR`, `GITS_EVENT_RUNNING` and the 133 variables
+of lifecycle events.
+
+- column 1: the name with its value exactly as it is in the shell: `NAME (not defined)`,
+  `NAME="" (empty)`, `NAME="value"` (was: two columns, and empty looked like not defined)
+- column 2: the default
+- column 3: the value gits uses in the end (the value, the default, where it came from when it
+  was read from an old name, or what happens without it)
+

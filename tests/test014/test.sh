@@ -22,7 +22,8 @@
 #   8. the other ways of saying ctrl+enter: modifyOtherKeys of xterm, ctrl+j, ctrl+s
 #   9. ctrl+enter with nothing ticked writes nothing
 #  10. leaving: q and Esc (exit code 1), Ctrl+C (exit code 130): the config is not touched
-#  11. "gits add --yes" in a terminal: no list, everything is added
+#  11. stdin which is not a terminal (echo "" | gits add ...), in a terminal: no list,
+#      everything is added. "gits add --yes" is refused
 #
 # Needs: the compiled binary (/bin/bash compile.sh) and python3 (only for tests/terminal.py).
 #
@@ -335,13 +336,34 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "esc and ctrl+c: nothing is written"
 
-# ---------- 11. --yes ----------
+# ---------- 11. stdin which is not a terminal ----------
 
-# "gits add --yes" in a terminal: no list, no key is needed, every found file is added.
+# The way to say "no list" in a terminal: echo "" | gits add ...
+# tests/terminal.py starts a shell in the pseudo terminal, so stdout of gits is a terminal and
+# only its stdin is a pipe. No key is pressed: gits adds every found file and ends by itself.
 config
-COMMAND='keys "" add --yes dir .env 2>&1 | has "added lines: 4"; list | wc -l | tr -d " "'
+export BIN
+COMMAND='python3 "${_ROOT}/tests/terminal.py" "" /bin/bash -c "echo \"\" | \"\${BIN}\" add dir .env" 2>&1 | has "added lines: 4"; list | wc -l | tr -d " "'
 EXPECTED_STDOUT="added lines: 4
 6"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
-test "add --yes: no list"
+test "echo | gits add: no list"
+
+# The same with -e: without the list -e applies to every file.
+config
+COMMAND='python3 "${_ROOT}/tests/terminal.py" "" /bin/bash -c "echo \"\" | \"\${BIN}\" add -e dir .env" > /dev/null 2>&1; list | grep -c ":e:"'
+EXPECTED_STDOUT="4"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "echo | gits add -e: everything as encrypted"
+
+# --yes belongs to push and pull. add refuses it and says what to do instead; nothing is written.
+config
+COMMAND='gits add --yes dir 2>&1 | has "gits add doesn'"'"'t take --yes" "echo \"\" | gits add"; list'
+EXPECTED_STDOUT="gits add doesn't take --yes
+echo \"\" | gits add
+${L0}"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "add --yes is refused"

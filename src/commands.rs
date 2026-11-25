@@ -452,19 +452,54 @@ pub fn add_to_config(
     Ok((lines.join("\n"), added))
 }
 
+// lines of stdin which are not empty, when stdin is not a terminal (a terminal is for the list)
+fn paths_from_stdin() -> Result<Vec<String>, String> {
+    use std::io::{IsTerminal, Read};
+    let mut stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        return Ok(Vec::new());
+    }
+    let mut bytes = Vec::new();
+    stdin
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("can't read the list of paths from stdin: {e}"))?;
+    Ok(String::from_utf8_lossy(&bytes)
+        .lines()
+        .map(|line| line.trim_end_matches('\r'))
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.to_string())
+        .collect())
+}
+
 /**
  * Registers files in .git/gits.sh, nothing else: the result is there to be reviewed.
  *
  * In a terminal the found files are shown first as a list (src/menu.rs) where each one can be
- * ticked, and marked as encrypted; the config is written after ctrl+enter. At the beginning
- * everything is ticked, with -e also as encrypted.
- * Without a terminal (a pipe, a script) and with --yes there is no list: all the found files
- * are added, with -e all of them as encrypted.
+ * ticked, and marked as encrypted; the config is written after ctrl+enter.
+ * When stdin is not a terminal (echo "" | gits add ..., a script) there is no list: all the
+ * found files are added.
+ *
+ * A stdin which is not a terminal is also read: every line of it which is not empty is a path
+ * of a file, the way find prints them (find . -name '.env*' | gits add). Only files are taken
+ * from there: a directory in such a list is skipped, not walked, because find lists the files
+ * it selected itself. Paths given as arguments are still taken, a directory there is walked.
+ *
+ * encrypt (-e): the files are registered as encrypted elements, "SOURCE:e:TARGET" instead of
+ * "SOURCE::TARGET". Without a list: all of them. With the list: the box "enc" of every row is
+ * ticked at the beginning, and can be unticked there.
  */
 pub fn add(ctx: &Ctx, paths: &[String], encrypt: bool, yes: bool) -> Result<i32, String> {
-    if paths.is_empty() {
+    if yes {
         return Err(
-            "usage: gits add [-e] [--yes] <file|directory> [<file|directory> ...]".to_string(),
+            "gits add doesn't take --yes. In a terminal it shows the list of found files; to add all of them without the list give it a stdin which is not a terminal: echo \"\" | gits add <file|directory> ..."
+                .to_string(),
+        );
+    }
+    let piped = paths_from_stdin()?;
+    if paths.is_empty() && piped.is_empty() {
+        return Err(
+            "usage: gits add [-e] <file|directory> [<file|directory> ...]\n       find ... | gits add [-e]      (paths of files from stdin, one per line)"
+                .to_string(),
         );
     }
 
@@ -488,6 +523,16 @@ pub fn add(ctx: &Ctx, paths: &[String], encrypt: bool, yes: bool) -> Result<i32,
             return Err(format!(">{path}< is neither a file nor a directory"));
         }
     }
+    for path in &piped {
+        let full = absolute(&crate::util::expand_tilde(path), dir);
+        if full.is_file() {
+            files.push(full);
+        } else if !full.is_dir() {
+            return Err(format!(
+                ">{path}< (from stdin) is neither a file nor a directory"
+            ));
+        }
+    }
 
     let text = fs::read_to_string(&config)
         .map_err(|e| format!("can't read >{}<: {e}", config.display()))?;
@@ -500,7 +545,7 @@ pub fn add(ctx: &Ctx, paths: &[String], encrypt: bool, yes: bool) -> Result<i32,
         return Ok(0);
     }
 
-    let chosen: Vec<(PathBuf, bool)> = if !yes && menu::interactive() {
+    let chosen: Vec<(PathBuf, bool)> = if menu::interactive() {
         let rows = fresh
             .iter()
             .map(|f| (shown(f, dir), true, encrypt))

@@ -397,7 +397,8 @@ impl Menu {
     }
 }
 
-// the menu needs a person: a terminal on both ends
+// The menu needs a person: stdin is a terminal (echo "" | gits add ... is the way to say
+// "no list"), and there is a terminal to draw on
 pub fn interactive() -> bool {
     unsafe { libc::isatty(0) == 1 && libc::isatty(1) == 1 }
 }

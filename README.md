@@ -133,11 +133,23 @@ In a terminal `add` shows first what it found, one row per file which is not in 
 
 - **add**: the file goes to the list. Everything is ticked at the beginning.
 - **enc**: the file is written as an [encrypted element](#9-encrypted-files) (`SOURCE:e:TARGET`).
-  The box exists only in a ticked row. `gits add -e` starts with all of them ticked.
+  The box exists only in a ticked row.
+- `gits add -e ...`: register the files as encrypted elements. In the list it only means that
+  the box **enc** of every row is ticked at the beginning; without the list it applies to
+  every file.
 - Enter alone never writes. A terminal which can't tell `ctrl+enter` from Enter (Terminal.app
   of macOS, some terminals of editors): `ctrl+j` or `ctrl+s` do the same.
-- `gits add --yes ...`, or `add` without a terminal (in a script, in a pipe): no list, every
-  found file is added.
+- The list is shown only when stdin is a terminal. To add everything found without it:
+  `echo "" | gits add ...` (in a script without a terminal it happens by itself).
+- Paths can also come from stdin, one file per line, the way `find` prints them. No list then:
+
+  ```sh
+  find . -name '.env*' -not -path './node_modules/*' | gits add
+  find config -type f | gits add -e          # all of them as encrypted elements
+  ```
+
+  Only files are taken from stdin: a directory in such a list is skipped (not walked), empty
+  lines too. Paths given as arguments are added as well.
 
 `add` only appends lines to `GITS_LIST`, in the style the config already uses. Nothing is
 copied or pushed, so the result can be reviewed: `gits diff`, then `gits push --yes`.
@@ -319,13 +331,26 @@ In the root of a project:
 | `gits push --yes` | local files -> storage: commit `gits push <GITS_TARGETDIR>` and push. Without `--yes` nothing is changed |
 | `gits pull --yes` | storage -> local files, **they are overwritten**. Without `--yes` nothing is changed |
 | `gits url` | web address of the directory of the project in the storage |
-| `gits add [-e] [--yes] <file\|directory> ...` | appends elements to `GITS_LIST`, nothing else, so it can be reviewed. In a terminal: [a list to tick](#5-adding-files-to-the-list) which files and which of them encrypted, written after `ctrl+enter`. `-e`: encrypted from the start. `--yes`: no list, everything found |
+| `gits add [-e] <file\|directory> ...` | appends elements to `GITS_LIST`, nothing else, so it can be reviewed. In a terminal: [a list to tick](#5-adding-files-to-the-list) which files and which of them encrypted, written after `ctrl+enter`. Without the list: `echo "" \| gits add ...`. `-e`: as encrypted elements (`SOURCE:e:TARGET`); with the list it only pre-ticks **enc** |
 | `gits move <old remote> <new remote>` | prints the procedure of renaming the directory in the storage after the remote `origin` changed |
 | `gits migrate` | `.git/gitstorage-config.sh` -> `.git/gits.sh`, old names of the variables -> new ones |
 
 ## Environment variables
 
-`gits --help` prints this table with the values found on your machine.
+`gits --help` lists **every** variable gits reacts to (also the old names, `HOME`, `NO_COLOR`
+and one variable per lifecycle event) in three columns:
+
+```
+  variable, and its value in the shell   | default           | used
+  ---------------------------------------|-------------------|-----
+  GITS_SOURCE="git@github.com:me/s.git"  | (none, required)  | git@github.com:me/s.git
+  GITS_SHELL (not defined)               | /bin/bash         | /bin/bash
+  GITS_TEMPLATE="" (empty)               | (none)            | (built-in template)
+```
+
+1. the name with the value exactly as it is in the shell: `(not defined)`, `"" (empty)` or the value in quotes
+2. the default
+3. what gits ends up using. An empty value counts as not defined, so the default is used
 
 | Variable | Default | |
 | --- | --- | --- |
@@ -360,6 +385,14 @@ somebody who controls the release.
 /bin/bash tests/test003/test.sh       # only this one
 /bin/bash tag.sh patch                # next tag, pushed: the workflow builds and publishes the release
 ```
+
+Releasing, the same way as in [xx](submodules/xx):
+
+1. add a section `## <new tag>` to [changelog.md](changelog.md): it becomes the top of the release page
+2. `xx "release notes preview" <new tag>` prints that page without releasing anything
+3. `xx publish` (or `/bin/bash tag.sh [patch|minor|major]`) creates and pushes the tag
+4. the pushed tag starts `.github/workflows/rust.yml`: tests, the three binaries, `SHA256SUMS.txt`,
+   the GitHub release. That release is what `gits --update` installs
 
 Every `tests/testNNN/test.sh` is a list of checks made with the function `test` of the library
 `bash/test.sh`: a command (`COMMAND`) and what it has to give (`EXPECTED_STDOUT`, `EXPECTED_STDERR`,

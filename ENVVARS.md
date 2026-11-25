@@ -25,3 +25,6 @@ All of the above are given to every lifecycle script (the first five with the va
 together with GITS_EVENT_* - see LIFECYCLE.md, chapter Reference.
 
 The old names (GITSTORAGE...) are still read when the new one is not defined.
+
+The full list of what gits reacts to, with the value of each in your shell, its default and
+the value gits ends up using: gits --help

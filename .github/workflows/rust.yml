@@ -157,7 +157,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      # needed for bash/release_notes.sh
+      # needed for changelog.md and bash/release_notes.sh
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -175,7 +175,7 @@ jobs:
           shasum -a 256 gits-* > SHA256SUMS.txt
           cat SHA256SUMS.txt
           cd ..
-          /bin/bash bash/release_notes.sh "${{ github.ref_name }}" "${{ github.repository }}" > release_notes.md
+          /bin/bash bash/release_notes.sh "${{ github.ref_name }}" "${{ github.repository }}" release-dist > release_notes.md
           cat release_notes.md
 
       - name: Create GitHub Release

@@ -42,7 +42,8 @@ $G --help | tail -n 8                     # the table at the end: GITS_SOURCE is
 $G state                      all projects below the current directory: in sync or not
 $G find                       only the list of those projects
 $G init                       create .git/gits.sh (from the storage, or from a template)
-$G add [-e] [--yes] FILE|DIR  register files in .git/gits.sh (in a terminal: a list to tick, ctrl+enter writes)
+$G add [-e] FILE|DIR ...      register files in .git/gits.sh (in a terminal: a list to tick, ctrl+enter writes;
+                              -e: as encrypted elements SOURCE:e:TARGET; no list: echo "" | $G add ...)
 $G diff                       what differs between local files and the storage
 $G isinsync                   the same, only the exit code: 0 in sync, 1 not, 2 error
 $G push [--yes]               local files -> storage
@@ -244,12 +245,13 @@ echo 'a' > config/a.json
 echo 'b' > config/local/b.json
 echo 'token' > .npmrc
 
-# --yes: add everything found, without asking (without it a list to tick is shown: next block)
-$G add --yes .npmrc                   # one file
-$G add --yes config                   # a directory: every file in it, each as its own line
+# echo "" | : stdin is not a terminal, so everything found is added without asking
+# (with a terminal on stdin a list to tick is shown: next block)
+echo "" | $G add .npmrc                   # one file
+echo "" | $G add config                   # a directory: every file in it, each as its own line
 cat .git/gits.sh                      # three new lines, in the style the config already uses
 
-$G add --yes config                   # again: nothing added, all are there already
+echo "" | $G add config                   # again: nothing added, all are there already
 git -C $D/storage log --oneline       # add stored nothing
 ```
 
@@ -259,7 +261,7 @@ $G push --yes
 find "$D/storage/git@github.com:demo__project.git" -type f
 ```
 
-Without `--yes`, in a terminal, `add` first shows what it found and lets you choose. Run this
+With a terminal on stdin `add` first shows what it found and lets you choose. Run this
 one line alone and play with the list: arrows move, `space` ticks, the column `add` says which
 files go to the config, `enc` which of them as encrypted (`a` `n` `i` and `A` `N` `I`: all /
 none / invert of each column). `ctrl+enter` writes (`ctrl+j` when your terminal doesn't tell
@@ -278,7 +280,7 @@ your home. Here a file elsewhere in `s/`:
 mkdir -p $D/elsewhere
 echo 'not in the project' > $D/elsewhere/tool.conf
 
-$G add --yes $D/elsewhere/tool.conf
+echo "" | $G add $D/elsewhere/tool.conf
 tail -n 4 .git/gits.sh                # SOURCE is written as ~/... because s/ is below your home; elsewhere it is the absolute path
 $G push --yes
 find "$D/storage/git@github.com:demo__project.git" -type f | grep tool.conf
@@ -295,7 +297,7 @@ cd $D/second
 git remote add origin git@github.com:demo/second.git
 echo 'KEY=1' > .env
 $G init
-$G add --yes .env
+echo "" | $G add .env
 $G push --yes
 ```
 

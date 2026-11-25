@@ -83,6 +83,9 @@ cat <<EEE
   xx compile               build bin/<arch>/gits
   xx test                  compile + unit tests + tests/test*/test.sh
   xx publish               new tag (patch / minor / major) pushed: github actions build and publish the release
+                           (before it: section "## <new tag>" in changelog.md)
+  xx "release notes preview" v0.1.0
+                           the body of the release page for that tag, without releasing
 
   xx "submodule add"       once, ever        register the submodules and commit the result
   xx "submodule install"   once per clone    download the submodules at the pinned commits
@@ -322,6 +325,26 @@ cat <<EEE
 EEE
 `,
       description: `compile + cargo test + tests/test*/test.sh`,
+      confirm: false,
+    },
+    [`release notes preview`]: {
+      command: `
+set -e
+
+TAG="\${1:-v0.0.0}"
+
+/bin/bash compile.sh > /dev/null
+
+# the same shape the release job gives to bash/release_notes.sh: binaries + SHA256SUMS.txt
+TMP="\$(mktemp -d)"
+cp bin/*/gits "\${TMP}/gits-local-build"
+(cd "\${TMP}" && shasum -a 256 gits-* > SHA256SUMS.txt)
+
+/bin/bash bash/release_notes.sh "\${TAG}" stopsopa/gits "\${TMP}"
+
+rm -rf "\${TMP:?}"
+`,
+      description: `print the body of the github release page. Optional argument: tag, to see its section of changelog.md, e.g. xx "release notes preview" v0.1.0`,
       confirm: false,
     },
     [`publish`]: {

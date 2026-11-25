@@ -415,7 +415,7 @@ one; its `AFTER_PROJECT` has `GITS_EVENT_RESULT=error`.
         |
   [ read .git/gits.sh, find the files ]
         |
-  [ in a terminal, without --yes: the list to tick the files; left without ctrl+enter -> END ]
+  [ when stdin is a terminal: the list to tick the files; left without ctrl+enter -> END ]
         |
   [ make the new lines ]
         |

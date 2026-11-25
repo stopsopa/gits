@@ -65,34 +65,67 @@ STORAGE="${GITS_SOURCE}"
 #   "gits state"               the list of commands is there
 #   "gits --update --check"    the update is described
 #   "variable"                 header of the table of env vars
-#   "GITS_SOURCE | ..."   the row of the variable shows the value found in env
+#   GITS_SOURCE="..."          the row of the variable shows the value it has in the shell
 #   "MISSING"                  must NOT be there (so it is not in EXPECTED_STDOUT): nothing required is missing
-COMMAND='gits --help 2>&1 | has "gits state" "gits --update --check" "variable" "GITS_SOURCE            | ${STORAGE}" "MISSING"'
+COMMAND='gits --help 2>&1 | has "gits state" "gits --update --check" "variable, and its value in the shell" "GITS_SOURCE=\"${STORAGE}\"" "MISSING"'
 EXPECTED_STDOUT="gits state
 gits --update --check
-variable
-GITS_SOURCE            | ${STORAGE}"
+variable, and its value in the shell
+GITS_SOURCE=\"${STORAGE}\""
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "--help: commands, update, table of env vars, value found in env, nothing is missing"
 
 # Only the row of GITS_SHELL from the table, with runs of spaces squeezed to one (tr -s),
 # so the padding of the columns doesn't matter.
-# Columns: variable | found in env | default | used.
+# Columns: variable with its value in the shell | default | used.
 # The variable is not defined here: "(not defined)", and the default /bin/bash is the value in use.
-COMMAND='gits --help 2>&1 | grep "^  GITS_SHELL  *|" | tr -s " "'
-EXPECTED_STDOUT=" GITS_SHELL | (not defined) | /bin/bash | /bin/bash"
+COMMAND='gits --help 2>&1 | grep "^  GITS_SHELL[ =].* | " | tr -s " "'
+EXPECTED_STDOUT=" GITS_SHELL (not defined) | /bin/bash | /bin/bash"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "--help: default value wins when env var is not defined"
 
-# The same row with the variable defined for this one call: the value from env is shown in the
-# second column and it is the one in use (last column), the default stays /bin/bash.
-COMMAND='GITS_SHELL=/bin/zsh gits --help 2>&1 | grep "^  GITS_SHELL  *|" | tr -s " "'
-EXPECTED_STDOUT=" GITS_SHELL | /bin/zsh | /bin/bash | /bin/zsh"
+# The same row with the variable defined for this one call: the value from env is shown next
+# to the name and it is the one in use (last column), the default stays /bin/bash.
+COMMAND='GITS_SHELL=/bin/zsh gits --help 2>&1 | grep "^  GITS_SHELL[ =].* | " | tr -s " "'
+EXPECTED_STDOUT=" GITS_SHELL=\"/bin/zsh\" | /bin/bash | /bin/zsh"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "--help: the value which wins is the one from env"
+
+# Defined as an empty text is not the same as not defined, and the first column shows which one
+# it is: NAME="" (empty). For gits an empty value counts as no value: the default is used.
+COMMAND='GITS_SHELL="" gits --help 2>&1 | grep "^  GITS_SHELL[ =].* | " | tr -s " "'
+EXPECTED_STDOUT=" GITS_SHELL=\"\" (empty) | /bin/bash | /bin/bash"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "--help: an empty value is shown as empty, the default is used"
+
+# The table lists every variable gits reacts to, not only the main ones. One row of each kind
+# (tr squeezes the padding):
+#   - a variable of a lifecycle event, defined here: its script is the value in use, ~/ expanded
+#   - the same kind, not defined: no script
+#   - a replaceable event: its default is the built-in script
+#   - a name from before the rename, not defined
+#   - NO_COLOR, a variable of other programs: defined (also as an empty text) means no colors
+COMMAND='GITS_PUSH_AFTER_PUSH="~/after.sh" NO_COLOR="" gits --help 2>&1 | grep "^  GITS_PUSH_AFTER_PUSH=\|^  GITS_PUSH_BEFORE_PUSH \|^  GITS_STATE_FIND \|^  GITSTORAGETESHELL \|^  NO_COLOR=" | tr -s " "'
+EXPECTED_STDOUT=" GITSTORAGETESHELL (not defined) | (none) | (not used)
+ NO_COLOR=\"\" (empty) | (none) | no colors
+ GITS_STATE_FIND (not defined) | built-in: events/defaults/FIND.sh | the built-in script
+ GITS_PUSH_BEFORE_PUSH (not defined) | (none) | (no script)
+ GITS_PUSH_AFTER_PUSH=\"~/after.sh\" | (none) | ${HOME}/after.sh"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "--help: rows of events, old names and NO_COLOR"
+
+# And the number of rows of the table: a line with two "|" which starts with a name of a
+# variable. 6 of gits itself + 4 old names + HOME, NO_COLOR (2) + GITS_EVENT_RUNNING (1) + 133 of events.
+COMMAND='gits --help 2>&1 | grep -c "^  [A-Z_]*[ =].* | .* | "'
+EXPECTED_STDOUT="146"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "--help: all variables are listed"
 
 # Output of "gits" and of "gits --help" compared with diff: no difference (empty output, exit code 0)
 # means that calling gits without arguments shows the help.

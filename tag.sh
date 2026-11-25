@@ -5,6 +5,10 @@
 #   /bin/bash tag.sh patch     x.y.Z+1
 #   /bin/bash tag.sh minor     x.Y+1.0
 #   /bin/bash tag.sh major     X+1.0.0
+#
+# The same through the menu: xx publish [patch|minor|major]
+# Before it: add section "## <new tag>" to changelog.md, it becomes the top of the release page
+# (preview: xx "release notes preview" <new tag>).
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -101,6 +105,10 @@ fi
 
 if [[ -z "$(git branch -r --contains HEAD 2> /dev/null)" ]]; then
   echo "${YELLOW}warning: current commit is not pushed to any remote branch (the tag will be pushed with it anyway)${RESET}"
+fi
+
+if ! grep -q "^## ${NEW_TAG}\$" "${DIR}/changelog.md" 2> /dev/null; then
+  echo "${YELLOW}warning: no section '## ${NEW_TAG}' in changelog.md, release page will have no description of changes${RESET}"
 fi
 
 # Ctrl+D (end of input) must not be treated as Enter

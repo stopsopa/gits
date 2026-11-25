@@ -1078,6 +1078,18 @@ fn kind_text(def: &Def) -> &'static str {
     }
 }
 
+// every variable a script can be registered with, in the order of "gits events": (name, replaces a default)
+pub fn variables() -> Vec<(String, bool)> {
+    let mut out = vec![("GITS_ALL".to_string(), false)];
+    for (command, defs) in REGISTRY {
+        out.push((variable(command, "ALL"), false));
+        for def in *defs {
+            out.push((variable(command, def.name), def.kind == Kind::Replace));
+        }
+    }
+    out
+}
+
 // every event of every command and what is defined right now
 pub fn table() -> String {
     let mut out = String::new();

@@ -33,6 +33,8 @@ struct Var {
     name: &'static str,
     default: &'static str,
     required: bool,
+    // what happens when there is neither a value nor a default
+    unset: &'static str,
     about: &'static str,
 }
 
@@ -41,36 +43,42 @@ const VARS: [Var; 6] = [
         name: ENV_SOURCE,
         default: "",
         required: true,
+        unset: "MISSING (required)",
         about: "the storage: git repository where files are kept, e.g. git@github.com:stopsopa/gitstorage.git",
     },
     Var {
         name: config::ENV_SHELL,
         default: config::DEFAULT_SHELL,
         required: false,
-        about: "shell which executes .git/gits.sh (the config is a shell script)",
+        unset: "",
+        about: "shell which executes .git/gits.sh (the config is a shell script) and the scripts of events",
     },
     Var {
         name: socket::ENV_SOCKET,
         default: "",
         required: false,
+        unset: "(not used: elements SOURCE:e:TARGET can't be handled)",
         about: "unix socket of the encoder process, needed only for elements SOURCE:e:TARGET",
     },
     Var {
         name: commands::ENV_TEMPLATE,
         default: "",
         required: false,
+        unset: "(built-in template)",
         about: "url or file: template of .git/gits.sh for 'gits init' (default: built-in)",
     },
     Var {
         name: update::ENV_RELEASES,
         default: update::RELEASES,
         required: false,
+        unset: "",
         about: "where 'gits --update' takes releases from (url or directory)",
     },
     Var {
         name: update::ENV_CONFIRM,
         default: "true",
         required: false,
+        unset: "",
         about: "false: 'gits --update' doesn't ask before replacing the binary",
     },
 ];
@@ -82,72 +90,177 @@ fn pad(text: &str, width: usize) -> String {
     )
 }
 
-// name | value found in the environment | default | the value which wins
-fn env_table() -> String {
-    let rows: Vec<[String; 4]> = VARS
-        .iter()
-        .map(|v| {
-            let named = env_named(v.name);
-            let found = named.as_ref().map(|(value, from)| {
-                if from == v.name {
-                    value.clone()
-                } else {
-                    format!("{value} (from {from})")
-                }
-            });
-            let used = match (&named, v.default.is_empty()) {
-                (Some((value, _)), _) => value.clone(),
-                (None, false) => v.default.to_string(),
-                (None, true) if v.required => "MISSING (required)".to_string(),
-                (None, true) => "(not used)".to_string(),
-            };
-            [
-                v.name.to_string(),
-                found.unwrap_or_else(|| "(not defined)".to_string()),
-                if v.default.is_empty() {
-                    "(none)".to_string()
-                } else {
-                    v.default.to_string()
-                },
-                used,
-            ]
-        })
-        .collect();
+/**
+ * First column of the table of env vars: the name with the value exactly as it is in the
+ * environment, so the three cases can be told apart:
+ *
+ *   NAME (not defined)
+ *   NAME="" (empty)
+ *   NAME="value"          quoted: spaces at the ends are visible
+ */
+fn in_shell(name: &str) -> String {
+    match std::env::var_os(name) {
+        None => format!("{name} (not defined)"),
+        Some(value) if value.is_empty() => format!("{name}=\"\" (empty)"),
+        Some(value) => format!("{name}=\"{}\"", value.to_string_lossy()),
+    }
+}
 
-    let header = ["variable", "found in env", "default", "used"];
+enum Row {
+    // a line between groups of variables
+    Title(&'static str),
+    // variable with its value in the shell | default | the value gits uses | printed in red
+    Var(String, String, String, bool),
+}
+
+/**
+ * Every env var gits reacts to: the ones with a meaning of their own, the old names, the
+ * variables of other programs gits looks at, and one variable per lifecycle event.
+ */
+fn env_rows() -> Vec<Row> {
+    let mut rows = vec![Row::Title("gits itself")];
+
+    for v in VARS.iter() {
+        let named = env_named(v.name);
+        let used = match &named {
+            Some((value, from)) if from == v.name => value.clone(),
+            Some((value, from)) => format!("{value} (from {from})"),
+            None if !v.default.is_empty() => v.default.to_string(),
+            None => v.unset.to_string(),
+        };
+        let default = match (v.default.is_empty(), v.required) {
+            (false, _) => v.default.to_string(),
+            (true, true) => "(none, required)".to_string(),
+            (true, false) => "(none)".to_string(),
+        };
+        rows.push(Row::Var(
+            in_shell(v.name),
+            default,
+            used,
+            v.required && named.is_none(),
+        ));
+    }
+
+    rows.push(Row::Title(
+        "names from before the rename, read only when the new one is not defined",
+    ));
+    for v in VARS.iter() {
+        let Some(old) = util::old_name(v.name) else {
+            continue;
+        };
+        let used = match (util::env(v.name), util::env(old)) {
+            (Some(_), Some(_)) => format!("(ignored: {} is defined)", v.name),
+            (None, Some(value)) => format!("{value} (as {})", v.name),
+            (_, None) => "(not used)".to_string(),
+        };
+        rows.push(Row::Var(in_shell(old), "(none)".to_string(), used, false));
+    }
+
+    rows.push(Row::Title("of other programs, gits looks at them too"));
+    rows.push(Row::Var(
+        in_shell("HOME"),
+        "(none)".to_string(),
+        match util::home() {
+            Some(home) => home.display().to_string(),
+            None => "(none: ~/ in paths is not expanded)".to_string(),
+        },
+        false,
+    ));
+    rows.push(Row::Var(
+        in_shell("NO_COLOR"),
+        "(none)".to_string(),
+        // defined with any value, also an empty one
+        if std::env::var_os("NO_COLOR").is_some() {
+            "no colors".to_string()
+        } else {
+            "colors, when the output is a terminal".to_string()
+        },
+        false,
+    ));
+
+    rows.push(Row::Title(
+        "lifecycle events: the value is the path of a script (see: gits events, LIFECYCLE.md)",
+    ));
+    let nested = util::env(events::ENV_RUNNING).is_some();
+    rows.push(Row::Var(
+        in_shell(events::ENV_RUNNING),
+        "(none)".to_string(),
+        if nested {
+            "no script of any event runs".to_string()
+        } else {
+            "(scripts of events run)".to_string()
+        },
+        false,
+    ));
+    for (name, replaceable) in events::variables() {
+        let default = if replaceable {
+            "built-in: events/defaults/FIND.sh"
+        } else {
+            "(none)"
+        };
+        let used = match util::env(&name) {
+            Some(_) if nested => format!("(ignored: {} is defined)", events::ENV_RUNNING),
+            // the path as gits will look for it: ~/ expanded
+            Some(value) => util::expand_tilde(&value).display().to_string(),
+            None if replaceable => "the built-in script".to_string(),
+            None => "(no script)".to_string(),
+        };
+        rows.push(Row::Var(in_shell(&name), default.to_string(), used, false));
+    }
+    rows
+}
+
+// variable with its value in the shell | default | the value gits uses
+fn env_table() -> String {
+    let rows = env_rows();
+    let header = ["variable, and its value in the shell", "default", "used"];
     let mut widths = header.map(|h| h.len());
     for row in &rows {
-        for (i, cell) in row.iter().enumerate() {
-            widths[i] = widths[i].max(cell.chars().count());
+        if let Row::Var(shell, default, _, _) = row {
+            widths[0] = widths[0].max(shell.chars().count());
+            widths[1] = widths[1].max(default.chars().count());
         }
     }
 
-    let line = |cells: [&str; 4]| -> String {
-        let padded: Vec<String> = cells
-            .iter()
-            .enumerate()
-            .map(|(i, c)| pad(c, widths[i]))
-            .collect();
-        format!("  {}", padded.join(" | ").trim_end())
+    let line = |cells: [&str; 3]| -> String {
+        format!(
+            "  {} | {} | {}",
+            pad(cells[0], widths[0]),
+            pad(cells[1], widths[1]),
+            cells[2]
+        )
     };
 
     let mut out = String::new();
     out.push_str(&line(header));
     out.push('\n');
-    let separator: Vec<String> = widths.iter().map(|w| "-".repeat(*w)).collect();
-    out.push_str(&format!("  {}\n", separator.join("-|-")));
-    for (row, var) in rows.iter().zip(VARS.iter()) {
-        let text = line([&row[0], &row[1], &row[2], &row[3]]);
-        if var.required && env_any(var.name).is_none() {
-            out.push_str(&red(&text));
-        } else {
-            out.push_str(&text);
+    out.push_str(&format!(
+        "  {}-|-{}-|-{}\n",
+        "-".repeat(widths[0]),
+        "-".repeat(widths[1]),
+        "-".repeat(header[2].len())
+    ));
+    for row in &rows {
+        match row {
+            Row::Title(title) => out.push_str(&format!("\n  # {title}\n")),
+            Row::Var(shell, default, used, missing) => {
+                let text = line([shell, default, used]);
+                if *missing {
+                    out.push_str(&red(&text));
+                } else {
+                    out.push_str(&text);
+                }
+                out.push('\n');
+            }
         }
-        out.push('\n');
     }
-    out.push('\n');
+    out.push_str(
+        "\n  first column: (not defined), \"\" (empty) or the value, exactly as it is in the shell.\n  \
+         A value which is empty or only spaces counts as not defined (besides NO_COLOR).\n\n",
+    );
+    let width = VARS.iter().map(|v| v.name.len()).max().unwrap_or(0);
     for var in VARS.iter() {
-        out.push_str(&format!("  {}  {}\n", pad(var.name, widths[0]), var.about));
+        out.push_str(&format!("  {}  {}\n", pad(var.name, width), var.about));
     }
     out
 }
@@ -187,11 +300,19 @@ In the root of a project (the directory with .git):
   gits push --yes       local files -> storage (commit and push). Without --yes nothing is changed
   gits pull --yes       storage -> local files (they are overwritten). Without --yes nothing is changed
   gits url              web address of the directory of this project in the storage
-  gits add [-e] [--yes] <file|directory> ...
+  gits add [-e] <file|directory> ...
                         register files in .git/gits.sh (only the config is changed).
                         In a terminal the found files are listed first: tick which ones to add
                         and which of them as encrypted, ctrl+enter writes them.
-                        -e: encrypted from the start. --yes: no list, add everything found
+                        Without the list, everything found: echo "" | gits add ...
+                        (the list is shown only when stdin is a terminal)
+                        Paths can also come from stdin, one file per line, no list then:
+                          find . -name '.env*' | gits add
+                          find config -type f | gits add -e
+                        -e: register the files as encrypted elements, SOURCE:e:TARGET instead
+                        of SOURCE::TARGET: push encrypts such a file before it is stored, pull
+                        and diff decrypt it (needs GITS_ENCRYPTION_SOCKET). With the list -e
+                        only ticks the box "enc" of every row at the start
   gits move <old remote> <new remote>
                         print the procedure of renaming the directory in the storage after
                         the remote 'origin' of the project changed

@@ -402,9 +402,12 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "without GITS_SOURCE: the error names the new variable"
 
-# the old name of the storage is read when the new one is not defined, --help says where the value is from
-COMMAND='GITSTORAGESOURCE="${STORAGE}" gits --help | grep "^  GITS_SOURCE  *|" | tr -s " "'
-EXPECTED_STDOUT=" GITS_SOURCE | ${STORAGE} (from GITSTORAGESOURCE) | (none) | ${STORAGE}"
+# the old name of the storage is read when the new one is not defined, --help says where the value is from.
+# Two rows of the table of env vars (columns: variable and its value in the shell | default | used):
+# the new name is not defined and uses the value of the old one, the old name shows its value.
+COMMAND='GITSTORAGESOURCE="${STORAGE}" gits --help | grep "^  GITS_SOURCE .* | \|^  GITSTORAGESOURCE=" | tr -s " "'
+EXPECTED_STDOUT=" GITS_SOURCE (not defined) | (none, required) | ${STORAGE} (from GITSTORAGESOURCE)
+ GITSTORAGESOURCE=\"${STORAGE}\" | (none) | ${STORAGE} (as GITS_SOURCE)"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "GITSTORAGESOURCE is still read, --help shows where the value came from"
