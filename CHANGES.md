@@ -262,3 +262,32 @@ of lifecycle events.
 - column 3: the value gits uses in the end (the value, the default, where it came from when it
   was read from an old name, or what happens without it)
 
+# gits list
+
+`gits list [--mode <variable>]`: the projects `gits state` would visit, absolute paths, one per
+line and nothing else on stdout: `gits list | /bin/bash script.sh`.
+
+- works without `GITS_SOURCE` (it only searches)
+- `--mode`: the name of the variable whose script does the search: `GITS_STATE_FIND` (default),
+  `GITS_FIND_FIND`, `GITS_MIGRATE_FIND`. Not defined: the built-in search
+- no other lifecycle script runs (no `START`, `FOUND`, `END`, `*_ALL`)
+- tests: `tests/test004`
+
+# GITS_PULL_TO_SYNC: the clone of the storage is kept
+
+Not in the original. Every command cloned the whole storage into a directory with a random name
+and removed it. With `GITS_PULL_TO_SYNC=<directory>` (absolute or `~/...`) all commands use that
+directory instead:
+
+- no clone there yet: `git clone`
+- a clone of `GITS_SOURCE` there: `git fetch`, then the branch (the one the clone started with,
+  the default branch of the storage) is reset to what origin has and the directory is cleaned.
+  Not `git pull`: a commit left by a previous run (the decrypted view, a push which failed) must
+  not be merged and pushed later
+- the same reset and clean at the end of every command, instead of removing the directory
+- anything else in that directory (not empty and not a clone, a clone of another repository):
+  an error, nothing is touched
+- limits: two gits commands at the same time would share the directory (no lock). Objects of
+  local commits with decrypted files can stay in `.git` of the kept clone until git collects them
+- `gits --help` lists it: 7 variables of gits itself now
+- code: `src/ops.rs` (`Temp`, `Storage::clone`, `restore`), tests: `tests/test015`

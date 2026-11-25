@@ -38,7 +38,7 @@ struct Var {
     about: &'static str,
 }
 
-const VARS: [Var; 6] = [
+const VARS: [Var; 7] = [
     Var {
         name: ENV_SOURCE,
         default: "",
@@ -66,6 +66,14 @@ const VARS: [Var; 6] = [
         required: false,
         unset: "(built-in template)",
         about: "url or file: template of .git/gits.sh for 'gits init' (default: built-in)",
+    },
+    Var {
+        name: ops::ENV_PULL_TO_SYNC,
+        default: "",
+        required: false,
+        unset: "(not used: a fresh clone in a directory with a random name, removed at the end)",
+        about: "directory (absolute or ~/...) where the clone of the storage is kept between runs: \
+                only what is new is fetched instead of cloning everything every time",
     },
     Var {
         name: update::ENV_RELEASES,

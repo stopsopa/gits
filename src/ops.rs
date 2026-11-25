@@ -6,7 +6,7 @@ use crate::cli::{cli, Options};
 use crate::config::{self, Project};
 use crate::events;
 use crate::socket::Lazy;
-use crate::util::{
+use crate::util::{self, 
     copy_file, git, git_out, green, interrupted, random_hex, red, unique_sibling, yellow,
 };
 use crate::Ctx;
@@ -40,17 +40,89 @@ fn sgit_out(cwd: &Path, args: &[&str]) -> Result<String, String> {
     git_out(cwd, &all)
 }
 
+pub const ENV_PULL_TO_SYNC: &str = "GITS_PULL_TO_SYNC";
+
 /**
- * Directory with a random name (4 hex characters) in `base`, removed when the value is dropped:
- * however the command ends, nothing is left behind.
+ * GITS_PULL_TO_SYNC: a directory which holds the clone of the storage between the runs of gits,
+ * instead of a fresh clone into a directory with a random name every time. Absolute or ~/...
+ * (a relative path would be another directory for every project).
+ */
+// true once the directory of GITS_PULL_TO_SYNC is known to hold the clone of the storage:
+// before that nothing in it is reset or removed (it can be a directory with something else)
+static SYNC_VERIFIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn sync_dir() -> Result<Option<PathBuf>, String> {
+    let Some(value) = util::env(ENV_PULL_TO_SYNC) else {
+        return Ok(None);
+    };
+    let path = util::expand_tilde(&value);
+    if !path.is_absolute() {
+        return Err(format!(
+            "{ENV_PULL_TO_SYNC}=>{value}< has to be an absolute path or start with ~/"
+        ));
+    }
+    Ok(Some(path))
+}
+
+/**
+ * The kept clone back to what origin has (as far as this clone knows) and nothing else in it:
+ * no local commit (the decrypted view, a commit which was not pushed), no staged or untracked file.
+ */
+fn restore(dir: &Path) {
+    if !dir.join(".git").exists() {
+        return;
+    }
+    let upstream = git_out(dir, &["rev-parse", "-q", "--verify", "@{upstream}"])
+        .ok()
+        .filter(|s| !s.is_empty());
+    match upstream {
+        Some(commit) => {
+            let _ = sgit(dir, &["reset", "-q", "--hard", &commit], true);
+        }
+        None => {
+            // the storage has no commits: back to a branch without commits
+            let _ = git_out(dir, &["update-ref", "-d", "HEAD"]);
+            let _ = git_out(dir, &["rm", "-r", "-q", "--cached", "--ignore-unmatch", "."]);
+        }
+    }
+    let _ = sgit(dir, &["clean", "-q", "-f", "-d", "-x"], true);
+}
+
+/**
+ * The directory of the clone of the storage.
+ *
+ * Normally: a directory with a random name (4 hex characters) in `base`, removed when the value
+ * is dropped: however the command ends, nothing is left behind.
+ *
+ * With GITS_PULL_TO_SYNC: that directory, kept. When the value is dropped the clone is only
+ * cleaned (see restore): decrypted files and local commits don't stay in the working tree.
  */
 pub struct Temp {
     pub path: PathBuf,
     quiet: bool,
+    keep: bool,
 }
 
 impl Temp {
     pub fn create(base: &Path, quiet: bool) -> Result<Temp, String> {
+        if let Some(path) = sync_dir()? {
+            fs::create_dir_all(&path).map_err(|e| {
+                format!(
+                    "can't create directory {ENV_PULL_TO_SYNC}=>{}<: {e}",
+                    path.display()
+                )
+            })?;
+            let path = fs::canonicalize(&path).unwrap_or(path);
+            if !quiet {
+                println!("_TARGETGITDIR: {} ({ENV_PULL_TO_SYNC})", path.display());
+            }
+            events::set("GITS_EVENT_TEMP_DIR", path.display().to_string());
+            return Ok(Temp {
+                path,
+                quiet,
+                keep: true,
+            });
+        }
         loop {
             let path = base.join(random_hex(2));
             if fs::symlink_metadata(&path).is_ok() {
@@ -63,7 +135,11 @@ impl Temp {
                 println!("_TARGETGITDIR: {}", path.display());
             }
             events::set("GITS_EVENT_TEMP_DIR", path.display().to_string());
-            return Ok(Temp { path, quiet });
+            return Ok(Temp {
+                path,
+                quiet,
+                keep: false,
+            });
         }
     }
 }
@@ -71,15 +147,26 @@ impl Temp {
 impl Drop for Temp {
     fn drop(&mut self) {
         if !self.quiet {
-            println!(
-                "{}",
-                yellow(&format!("\ngits cleaning {}", self.path.display()))
-            );
+            let what = if self.keep {
+                format!(
+                    "\ngits keeping {} ({ENV_PULL_TO_SYNC})",
+                    self.path.display()
+                )
+            } else {
+                format!("\ngits cleaning {}", self.path.display())
+            };
+            println!("{}", yellow(&what));
         }
         // nothing can be stopped here any more: a failing script is only reported
         let args = [self.path.display().to_string()];
         events::fire_quietly("BEFORE_CLEANUP", &args, &[]);
-        let _ = fs::remove_dir_all(&self.path);
+        if self.keep {
+            if SYNC_VERIFIED.load(std::sync::atomic::Ordering::SeqCst) {
+                restore(&self.path);
+            }
+        } else {
+            let _ = fs::remove_dir_all(&self.path);
+        }
         events::fire_quietly("AFTER_CLEANUP", &args, &[]);
     }
 }
@@ -102,12 +189,45 @@ impl Storage {
         let event_args = [dest.display().to_string()];
         events::fire("BEFORE_CLONE", &event_args, &[])?;
 
-        let mut args = vec!["clone"];
+        // GITS_PULL_TO_SYNC and the directory already has the clone: only what is new is fetched
+        let reuse = dest.join(".git").exists();
+        if reuse {
+            let origin = git_out(dest, &["remote", "get-url", "origin"]).unwrap_or_default();
+            let same = origin == source
+                || fs::canonicalize(&origin)
+                    .map(|p| p.to_string_lossy() == source)
+                    .unwrap_or(false);
+            if !same {
+                return Err(format!(
+                    "{ENV_PULL_TO_SYNC}=>{}< is a clone of >{origin}<, not of the storage GITS_SOURCE=>{source}<: \
+                     remove that directory or point the variable somewhere else",
+                    dest.display()
+                ));
+            }
+        } else if fs::read_dir(dest).map(|mut d| d.next().is_some()).unwrap_or(false) {
+            return Err(format!(
+                "{ENV_PULL_TO_SYNC}=>{}< is not empty and not a clone of the storage: gits doesn't touch it, \
+                 remove that directory or point the variable somewhere else",
+                dest.display()
+            ));
+        }
+
+        if sync_dir()?.is_some() {
+            SYNC_VERIFIED.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+
+        let mut args = if reuse {
+            vec!["fetch", "--prune", "origin"]
+        } else {
+            vec!["clone"]
+        };
         if quiet {
             args.push("-q");
         }
-        args.push(&source);
-        args.push(".");
+        if !reuse {
+            args.push(&source);
+            args.push(".");
+        }
         let cloned = if quiet {
             // isinsync: also the chatter of git on stderr is unwanted, it is shown only when the clone fails
             match cli("git", &args, Options::new().pwd(dest)) {
@@ -118,7 +238,17 @@ impl Storage {
         } else {
             git(dest, &args, false)
         };
-        cloned.map_err(|e| format!("can't clone storage GITS_SOURCE=>{source}<: {e}"))?;
+        cloned.map_err(|e| {
+            format!(
+                "can't {} storage GITS_SOURCE=>{source}<: {e}",
+                if reuse { "fetch" } else { "clone" }
+            )
+        })?;
+        if reuse {
+            // the branch stays the one the clone started with (the default branch of the storage);
+            // whatever an interrupted run left is thrown away, then the branch is what was fetched
+            restore(dest);
+        }
 
         let branch = git_out(dest, &["symbolic-ref", "--short", "HEAD"])
             .unwrap_or_else(|_| "master".to_string());
@@ -544,7 +674,7 @@ fn changed_files(storage: &Storage, project: &Project) {
     }
     println!("\nchanged files:");
     for entry in files {
-        println!("  {}", crate::util::blue(&entry.source.display().to_string()));
+        println!("  {}", util::blue(&entry.source.display().to_string()));
     }
     println!();
 }

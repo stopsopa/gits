@@ -123,6 +123,15 @@ gits push --yes    # local files -> storage
 Everything which needs the storage clones it to a directory with a random name in the current
 directory and removes it at the end, also after an error or Ctrl+C.
 
+To not clone the whole storage every time, keep the clone:
+
+```sh
+export GITS_PULL_TO_SYNC="~/.gits/storage"     # ~/.zshrc or ~/.bashrc
+```
+
+The first command clones the storage there, every next one only fetches what is new. Nothing
+is created in the project any more. See [environment variables](#environment-variables).
+
 ## 3. Every day: diff and push
 
 ```sh
@@ -403,6 +412,7 @@ and one variable per lifecycle event) in three columns:
 | `GITS_SHELL` | `/bin/bash` | shell which executes `.git/gits.sh` and the lifecycle scripts |
 | `GITS_ENCRYPTION_SOCKET` | | unix socket of the encoder process, needed only for `:e:` elements |
 | `GITS_TEMPLATE` | built-in | url or file: template for `gits init`. Its line `GITS_TARGETDIR=...` is replaced |
+| `GITS_PULL_TO_SYNC` | | directory (absolute or `~/...`) where the clone of the storage is kept between the runs, for every command. Not defined: a fresh clone in a directory with a random name in the current directory, removed at the end. Defined: the first command clones there, the next ones run `git fetch` and put the clone back to what origin has, on the branch the clone started with (the default branch of the storage); whatever was left there (local commits, untracked files) is thrown away, also at the end of every command. A directory which is not empty and not a clone of `GITS_SOURCE` is refused and not touched. Don't run two gits commands at the same time with it: they would share the directory. Not an event of `pull`, despite the name |
 | `GITS_<COMMAND>_<EVENT>`, `GITS_<COMMAND>_ALL`, `GITS_ALL` | | path of a lifecycle script, see [LIFECYCLE.md](LIFECYCLE.md) and `gits events` |
 | `GITS_RELEASES` | `https://github.com/stopsopa/gits/releases` | where `gits --update` takes releases from (url or directory) |
 | `GITS_CONFIRM` | `true` | `false`: `gits --update` doesn't ask |

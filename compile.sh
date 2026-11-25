@@ -46,6 +46,9 @@ if [[ ! -f "${SRC_BIN}" ]]; then
   exit 1
 fi
 
+# A new file, not the old one overwritten in place: macOS kills (exit code 137) a binary whose
+# file was overwritten while a process started from it was still running
+rm -f "${GITS_BIN_PATH}"
 cp "${SRC_BIN}" "${GITS_BIN_PATH}"
 
 echo "${GREEN}Done. Binary:${RESET}" >&2

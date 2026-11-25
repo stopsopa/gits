@@ -9,7 +9,12 @@ All commands are run from the root of this repository unless a `cd` says otherwi
 
 ## Once per terminal
 
+In the root of this repository (G and D below are made from the current directory: set
+anywhere else they point to nothing, and `$G` answers `permission denied`):
+
 ```sh
+[ -f compile.sh ] || echo "WRONG DIRECTORY: cd to the root of the gits repository first"
+
 /bin/bash compile.sh                      # builds bin/<arch>/gits (prints its path as the last line)
 
 export G="$PWD/$(ls bin/*/gits)"          # the binary, with an absolute path: the examples cd around

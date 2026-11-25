@@ -120,9 +120,9 @@ EXPECTED_CODE="0"
 test "--help: rows of events, old names and NO_COLOR"
 
 # And the number of rows of the table: a line with two "|" which starts with a name of a
-# variable. 6 of gits itself + 4 old names + HOME, NO_COLOR (2) + GITS_EVENT_RUNNING (1) + 133 of events.
+# variable. 7 of gits itself + 4 old names + HOME, NO_COLOR (2) + GITS_EVENT_RUNNING (1) + 133 of events.
 COMMAND='gits --help 2>&1 | grep -c "^  [A-Z_]*[ =].* | .* | "'
-EXPECTED_STDOUT="146"
+EXPECTED_STDOUT="147"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "--help: all variables are listed"
