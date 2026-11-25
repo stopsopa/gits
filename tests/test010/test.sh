@@ -43,7 +43,7 @@ if [[ -d "${_DIR}/tmp" ]]; then
 fi
 
 # the common setup of all tests: ${WORK} (tmp/ next to this file, from now on also the current
-# directory), own HOME and git config, an empty storage in ${WORK}/GITSTORAGESOURCE, function "test"
+# directory), own HOME and git config, an empty storage in ${WORK}/GITS_SOURCE, function "test"
 # and the helpers used here (gits, project, listing, has, fail)
 source "${_DIR}/../_lib.sh"
 
@@ -57,9 +57,9 @@ cd ws
 project fast "git@github.com:tmp/fast.git"
 echo "x" > fast/file.txt
 cat <<'EEE' > fast/.git/gits.sh
-GITSTORAGETARGETDIR="git@github.com:tmp__fast.git"
-GITSTORAGELIST=(
-    "../file.txt::$GITSTORAGETARGETDIR/file.txt"
+GITS_TARGETDIR="git@github.com:tmp__fast.git"
+GITS_LIST=(
+    "../file.txt::$GITS_TARGETDIR/file.txt"
 )
 EEE
 
@@ -68,13 +68,13 @@ EEE
 # executes it:
 #   touch  leaves a file: the sign for this test that state arrived here
 #   sleep  keeps state busy for 3 seconds: time to look at the directory and to interrupt it
-# Not quoted EEE: ${WORK} is put in now, \$GITSTORAGETARGETDIR stays for the config.
+# Not quoted EEE: ${WORK} is put in now, \$GITS_TARGETDIR stays for the config.
 # The file ../file.txt of this project doesn't exist, it doesn't matter: state never gets that far.
 project slow "git@github.com:tmp/slow.git"
 cat <<EEE > slow/.git/gits.sh
-GITSTORAGETARGETDIR="git@github.com:tmp__slow.git"
-GITSTORAGELIST=(
-    "../file.txt::\$GITSTORAGETARGETDIR/file.txt"
+GITS_TARGETDIR="git@github.com:tmp__slow.git"
+GITS_LIST=(
+    "../file.txt::\$GITS_TARGETDIR/file.txt"
 )
 touch "${WORK}/slow-config-started"
 sleep 3

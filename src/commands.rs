@@ -3,14 +3,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::config::{self, CONFIG, GIT_DIR, LEGACY, SEP_ENCRYPTED, SEP_PLAIN};
+use crate::events;
+use crate::menu;
 use crate::ops::{remote_branch, url_for, Storage, Temp};
 use crate::socket::Encoder;
 use crate::util::{absolute, fetch, green, home, red, relative, unique_sibling, yellow};
 use crate::Ctx;
 
-pub const ENV_TEMPLATE: &str = "GITSTORAGETEMPLATE";
+pub const ENV_TEMPLATE: &str = "GITS_TEMPLATE";
 
-const VARIABLE: &str = "GITSTORAGETARGETDIR";
+const VARIABLE: &str = "GITS_TARGETDIR";
+// in configs and templates written before the rename
+const OLD_VARIABLE: &str = "GITSTORAGETARGETDIR";
+const LIST: &str = "GITS_LIST";
+const OLD_LIST: &str = "GITSTORAGELIST";
 
 // inside double quotes of a shell script
 fn shell_escape(text: &str) -> String {
@@ -33,14 +39,14 @@ fn builtin_template(remote: &str) -> String {
 {VARIABLE}=""
 
 # "SOURCE::TARGET"    file stored as it is
-# "SOURCE:e:TARGET"   file stored encrypted (needs env var GITSTORAGETENCRYPTIONSOCKET)
+# "SOURCE:e:TARGET"   file stored encrypted (needs env var GITS_ENCRYPTION_SOCKET)
 #
 # SOURCE  file on this machine: absolute path, path starting with ~/ or path relative to the
 #         directory of this file (.git), so "../.env" is .env in the root of the project
-# TARGET  path in the storage repository (env var GITSTORAGESOURCE)
+# TARGET  path in the storage repository (env var GITS_SOURCE)
 #
 # gits add <file|directory> appends elements here
-GITSTORAGELIST=(
+GITS_LIST=(
     "{CONFIG}::${VARIABLE}/{CONFIG}"
     # "../.env:e:${VARIABLE}/.env"
     # "xx.ts::${VARIABLE}/xx.ts"
@@ -51,7 +57,7 @@ GITSTORAGELIST=(
 }
 
 /**
- * The line GITSTORAGETARGETDIR=... of a template replaced with the value of this project.
+ * The line GITS_TARGETDIR=... of a template replaced with the value of this project.
  * A template without such a line is an error: the config would not work.
  */
 pub fn set_target_dir(text: &str, target_dir: &str) -> Result<String, String> {
@@ -59,7 +65,11 @@ pub fn set_target_dir(text: &str, target_dir: &str) -> Result<String, String> {
     let mut out = String::with_capacity(text.len() + target_dir.len());
     for line in text.split_inclusive('\n') {
         let trimmed = line.trim_start();
-        if !done && trimmed.starts_with(&format!("{VARIABLE}=")) {
+        // a template written before the rename keeps the name it uses
+        let name = [VARIABLE, OLD_VARIABLE]
+            .into_iter()
+            .find(|name| trimmed.starts_with(&format!("{name}=")));
+        if let (false, Some(name)) = (done, name) {
             let indent = &line[..line.len() - trimmed.len()];
             let ending = if line.ends_with("\r\n") {
                 "\r\n"
@@ -69,7 +79,7 @@ pub fn set_target_dir(text: &str, target_dir: &str) -> Result<String, String> {
                 ""
             };
             out.push_str(&format!(
-                "{indent}{VARIABLE}=\"{}\"{ending}",
+                "{indent}{name}=\"{}\"{ending}",
                 shell_escape(target_dir)
             ));
             done = true;
@@ -102,7 +112,7 @@ Now check the config:
 
 /**
  * Creates .git/gits.sh. In order: what the storage already has for this project (it was set up
- * on another machine), else the template from GITSTORAGETEMPLATE, else the built-in template.
+ * on another machine), else the template from GITS_TEMPLATE, else the built-in template.
  */
 pub fn init(ctx: &Ctx) -> Result<i32, String> {
     let dir = &ctx.cwd;
@@ -137,8 +147,21 @@ pub fn init(ctx: &Ctx) -> Result<i32, String> {
     let stored = storage.root.join(&target_dir).join(CONFIG);
     let stored_legacy = storage.root.join(&target_dir).join(LEGACY);
 
+    let written = |origin: &str, after: bool| {
+        events::fire(
+            if after { "AFTER_WRITE" } else { "BEFORE_WRITE" },
+            &[config.display().to_string()],
+            &[("GITS_EVENT_WRITE_ORIGIN", origin.to_string())],
+        )
+    };
+    events::set("GITS_EVENT_PROJECT_DIR", dir.display().to_string());
+    events::set("GITS_EVENT_CONFIG", config.display().to_string());
+    events::set("GITS_TARGETDIR", target_dir.clone());
+
     if stored.is_file() {
+        written("storage", false)?;
         restore(ctx, &stored, &config)?;
+        written("storage", true)?;
         println!(
             "{}",
             green(&format!(
@@ -148,8 +171,10 @@ pub fn init(ctx: &Ctx) -> Result<i32, String> {
     } else if stored_legacy.is_file() {
         let text = fs::read_to_string(&stored_legacy)
             .map_err(|e| format!("can't read >{}<: {e}", stored_legacy.display()))?;
+        written("storage", false)?;
         fs::write(&config, config::migrate_content(&text))
             .map_err(|e| format!("can't write >{}<: {e}", config.display()))?;
+        written("storage", true)?;
         println!(
             "{}",
             green(&format!(
@@ -170,7 +195,14 @@ pub fn init(ctx: &Ctx) -> Result<i32, String> {
             Some(source) => format!("template {ENV_TEMPLATE}=>{source}<: {e}"),
             None => e,
         })?;
+        let origin = if ctx.template.is_some() {
+            "template"
+        } else {
+            "built-in"
+        };
+        written(origin, false)?;
         fs::write(&config, text).map_err(|e| format!("can't write >{}<: {e}", config.display()))?;
+        written(origin, true)?;
         println!(
             "{}",
             green(&format!(
@@ -246,7 +278,7 @@ struct Block {
     // SOURCE of every element, as an absolute path
     sources: HashSet<PathBuf>,
     indent: String,
-    // "$GITSTORAGETARGETDIR/" or "${GITSTORAGETARGETDIR}/"
+    // "$GITS_TARGETDIR/" or "${GITS_TARGETDIR}/"
     variable: String,
 }
 
@@ -270,10 +302,11 @@ fn most_common(counts: HashMap<String, usize>, default: &str) -> String {
 fn parse_block(lines: &[&str], project_dir: &Path) -> Result<Block, String> {
     let start = lines
         .iter()
-        .position(|l| l.trim_start().starts_with("GITSTORAGELIST=("))
-        .ok_or_else(|| {
-            "there is no line starting with GITSTORAGELIST=( in the config".to_string()
-        })?;
+        .position(|l| {
+            let l = l.trim_start();
+            l.starts_with(&format!("{LIST}=(")) || l.starts_with(&format!("{OLD_LIST}=("))
+        })
+        .ok_or_else(|| format!("there is no line starting with {LIST}=( in the config"))?;
     let end = lines
         .iter()
         .enumerate()
@@ -281,7 +314,7 @@ fn parse_block(lines: &[&str], project_dir: &Path) -> Result<Block, String> {
         .find(|(_, l)| l.trim_start().starts_with(')'))
         .map(|(i, _)| i)
         .ok_or_else(|| {
-            "can't find the end of GITSTORAGELIST in the config: a line starting with ) is expected, one element per line"
+            "can't find the end of GITS_LIST in the config: a line starting with ) is expected, one element per line"
                 .to_string()
         })?;
 
@@ -299,7 +332,12 @@ fn parse_block(lines: &[&str], project_dir: &Path) -> Result<Block, String> {
         sources.insert(config::resolve_source(&source, project_dir));
         let indent = &line[..line.len() - line.trim_start().len()];
         *indents.entry(indent.to_string()).or_default() += 1;
-        for form in [format!("${VARIABLE}/"), format!("${{{VARIABLE}}}/")] {
+        for form in [
+            format!("${VARIABLE}/"),
+            format!("${{{VARIABLE}}}/"),
+            format!("${OLD_VARIABLE}/"),
+            format!("${{{OLD_VARIABLE}}}/"),
+        ] {
             if target.starts_with(&form) {
                 *variables.entry(form).or_default() += 1;
             }
@@ -310,7 +348,21 @@ fn parse_block(lines: &[&str], project_dir: &Path) -> Result<Block, String> {
         end,
         sources,
         indent: most_common(indents, "    "),
-        variable: most_common(variables, &format!("${VARIABLE}/")),
+        // nothing to copy the style from: the variable the config defines
+        variable: most_common(
+            variables,
+            &format!(
+                "${}/",
+                if lines
+                    .iter()
+                    .any(|l| l.trim_start().starts_with(&format!("{OLD_VARIABLE}=")))
+                {
+                    OLD_VARIABLE
+                } else {
+                    VARIABLE
+                }
+            ),
+        ),
     })
 }
 
@@ -340,22 +392,49 @@ fn source_and_target(file: &Path, project_dir: &Path) -> (String, String) {
     (path, target)
 }
 
-// content of the config with the files appended to GITSTORAGELIST + the lines which were added
-pub fn add_to_config(
+// the files which are not in GITS_LIST yet (each once, in the given order) + how many were dropped
+pub fn not_registered(
     text: &str,
     files: &[PathBuf],
     project_dir: &Path,
-    encrypt: bool,
+) -> Result<(Vec<PathBuf>, usize), String> {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut block = parse_block(&lines, project_dir)?;
+    let fresh: Vec<PathBuf> = files
+        .iter()
+        .filter(|f| block.sources.insert((*f).clone()))
+        .cloned()
+        .collect();
+    let dropped = files.len() - fresh.len();
+    Ok((fresh, dropped))
+}
+
+// a file the way it is shown in the list of "gits add": relative to the project, ~/..., or absolute
+fn shown(file: &Path, project_dir: &Path) -> String {
+    if let Ok(inside) = file.strip_prefix(project_dir) {
+        return inside.to_string_lossy().to_string();
+    }
+    source_and_target(file, project_dir).0
+}
+
+/**
+ * Content of the config with the files appended to GITS_LIST + the lines which were added.
+ * files: (file, encrypted): "SOURCE:e:TARGET" when true, "SOURCE::TARGET" when not.
+ */
+pub fn add_to_config(
+    text: &str,
+    files: &[(PathBuf, bool)],
+    project_dir: &Path,
 ) -> Result<(String, Vec<String>), String> {
     let mut lines: Vec<&str> = text.split('\n').collect();
     let mut block = parse_block(&lines, project_dir)?;
-    let separator = if encrypt { SEP_ENCRYPTED } else { SEP_PLAIN };
 
     let mut added: Vec<String> = Vec::new();
-    for file in files {
+    for (file, encrypt) in files {
         if !block.sources.insert(file.clone()) {
             continue;
         }
+        let separator = if *encrypt { SEP_ENCRYPTED } else { SEP_PLAIN };
         let (source, target) = source_and_target(file, project_dir);
         added.push(format!(
             "{}\"{}{separator}{}{}\"",
@@ -373,10 +452,20 @@ pub fn add_to_config(
     Ok((lines.join("\n"), added))
 }
 
-// registers files in .git/gits.sh, nothing else: the result is there to be reviewed
-pub fn add(ctx: &Ctx, paths: &[String], encrypt: bool) -> Result<i32, String> {
+/**
+ * Registers files in .git/gits.sh, nothing else: the result is there to be reviewed.
+ *
+ * In a terminal the found files are shown first as a list (src/menu.rs) where each one can be
+ * ticked, and marked as encrypted; the config is written after ctrl+enter. At the beginning
+ * everything is ticked, with -e also as encrypted.
+ * Without a terminal (a pipe, a script) and with --yes there is no list: all the found files
+ * are added, with -e all of them as encrypted.
+ */
+pub fn add(ctx: &Ctx, paths: &[String], encrypt: bool, yes: bool) -> Result<i32, String> {
     if paths.is_empty() {
-        return Err("usage: gits add [-e] <file|directory> [<file|directory> ...]".to_string());
+        return Err(
+            "usage: gits add [-e] [--yes] <file|directory> [<file|directory> ...]".to_string(),
+        );
     }
 
     let dir = &ctx.cwd;
@@ -402,18 +491,48 @@ pub fn add(ctx: &Ctx, paths: &[String], encrypt: bool) -> Result<i32, String> {
 
     let text = fs::read_to_string(&config)
         .map_err(|e| format!("can't read >{}<: {e}", config.display()))?;
-    let (changed, added) = add_to_config(&text, &files, dir, encrypt)
-        .map_err(|e| format!("{e} (>{}<)", config.display()))?;
+    let found = files.len();
+    let (fresh, registered) =
+        not_registered(&text, &files, dir).map_err(|e| format!("{e} (>{}<)", config.display()))?;
 
-    if added.is_empty() {
-        println!(
-            "\n  nothing added: all {} file(s) are already in {GIT_DIR}/{CONFIG}\n",
-            files.len()
-        );
+    if fresh.is_empty() {
+        println!("\n  nothing added: all {found} file(s) are already in {GIT_DIR}/{CONFIG}\n");
         return Ok(0);
     }
 
+    let chosen: Vec<(PathBuf, bool)> = if !yes && menu::interactive() {
+        let rows = fresh
+            .iter()
+            .map(|f| (shown(f, dir), true, encrypt))
+            .collect();
+        match menu::select(rows, registered)? {
+            menu::Outcome::Done(picked) => picked
+                .into_iter()
+                .map(|(index, encrypted)| (fresh[index].clone(), encrypted))
+                .collect(),
+            menu::Outcome::Cancelled => {
+                println!("\n  nothing added: the list was left without ctrl+enter\n");
+                return Ok(1);
+            }
+            menu::Outcome::Interrupted => {
+                println!("\n  nothing added: interrupted\n");
+                return Ok(130);
+            }
+        }
+    } else {
+        fresh.into_iter().map(|f| (f, encrypt)).collect()
+    };
+
+    let (changed, added) =
+        add_to_config(&text, &chosen, dir).map_err(|e| format!("{e} (>{}<)", config.display()))?;
+
+    events::set("GITS_EVENT_PROJECT_DIR", dir.display().to_string());
+    events::set("GITS_EVENT_CONFIG", config.display().to_string());
+    let write_args = [config.display().to_string()];
+    let write_vars = [("GITS_EVENT_WRITE_ORIGIN", added.len().to_string())];
+    events::fire("BEFORE_WRITE", &write_args, &write_vars)?;
     fs::write(&config, changed).map_err(|e| format!("can't write >{}<: {e}", config.display()))?;
+    events::fire("AFTER_WRITE", &write_args, &write_vars)?;
 
     println!(
         "\n  added lines: {}\n  to file {GIT_DIR}/{CONFIG}\n",
@@ -427,7 +546,7 @@ pub fn add(ctx: &Ctx, paths: &[String], encrypt: bool) -> Result<i32, String> {
 }
 
 pub fn find(ctx: &Ctx) -> Result<i32, String> {
-    for project in config::find(&ctx.cwd) {
+    for project in config::find(&ctx.cwd)? {
         println!("{}", project.dir);
     }
     Ok(0)
@@ -449,7 +568,23 @@ pub fn migrate(ctx: &Ctx, args: &[String]) -> Result<i32, String> {
                 storage_note();
                 return Ok(0);
             }
-            if config::config_path(&ctx.cwd).is_file() {
+            let config = config::config_path(&ctx.cwd);
+            if config.is_file() {
+                // a gits.sh written before the variables were renamed (it works as it is, too)
+                let text = fs::read_to_string(&config)
+                    .map_err(|e| format!("can't read >{}<: {e}", config.display()))?;
+                let renamed = config::rename_variables(&text);
+                if renamed != text {
+                    fs::write(&config, renamed)
+                        .map_err(|e| format!("can't write >{}<: {e}", config.display()))?;
+                    println!(
+                        "{}",
+                        yellow(&format!(
+                            "{GIT_DIR}/{CONFIG}: variables renamed (GITSTORAGETARGETDIR -> GITS_TARGETDIR, GITSTORAGELIST -> GITS_LIST)"
+                        ))
+                    );
+                    return Ok(0);
+                }
                 println!("nothing to migrate: {GIT_DIR}/{CONFIG} is already here");
                 return Ok(0);
             }
@@ -458,7 +593,7 @@ pub fn migrate(ctx: &Ctx, args: &[String]) -> Result<i32, String> {
             ))
         }
         [all] if all == "all" => {
-            let found: Vec<_> = config::find(&ctx.cwd)
+            let found: Vec<_> = config::find(&ctx.cwd)?
                 .into_iter()
                 .filter(|f| f.legacy)
                 .collect();
@@ -558,64 +693,72 @@ mod tests {
 
     #[test]
     fn template_target_dir() {
-        let text = "#!/bin/bash\n  GITSTORAGETARGETDIR=\"old\"\nGITSTORAGELIST=(\n)\n";
+        let text = "#!/bin/bash\n  GITS_TARGETDIR=\"old\"\nGITS_LIST=(\n)\n";
         assert_eq!(
             set_target_dir(text, "git@github.com:o__r.git").unwrap(),
-            "#!/bin/bash\n  GITSTORAGETARGETDIR=\"git@github.com:o__r.git\"\nGITSTORAGELIST=(\n)\n"
+            "#!/bin/bash\n  GITS_TARGETDIR=\"git@github.com:o__r.git\"\nGITS_LIST=(\n)\n"
         );
-        assert!(set_target_dir("GITSTORAGELIST=(\n)\n", "x").is_err());
+        assert!(set_target_dir("GITS_LIST=(\n)\n", "x").is_err());
         // only the definition, not the places where it is used
         let built = set_target_dir(&builtin_template("git@github.com:o/r.git"), "D").unwrap();
-        assert!(built.contains("\nGITSTORAGETARGETDIR=\"D\"\n"));
-        assert!(built.contains("\"gits.sh::$GITSTORAGETARGETDIR/gits.sh\""));
+        assert!(built.contains("\nGITS_TARGETDIR=\"D\"\n"));
+        assert!(built.contains("\"gits.sh::$GITS_TARGETDIR/gits.sh\""));
     }
 
     #[test]
     fn add_keeps_everything_else() {
-        let text = "#!/bin/bash\nGITSTORAGETARGETDIR=\"d\"\n\nGITSTORAGELIST=(\n  \"gits.sh::${GITSTORAGETARGETDIR}/gits.sh\"\n\n  # comment\n  \"../.env::${GITSTORAGETARGETDIR}/.env\"\n)\n\necho after\n";
+        let text = "#!/bin/bash\nGITS_TARGETDIR=\"d\"\n\nGITS_LIST=(\n  \"gits.sh::${GITS_TARGETDIR}/gits.sh\"\n\n  # comment\n  \"../.env::${GITS_TARGETDIR}/.env\"\n)\n\necho after\n";
         let project = Path::new("/w/p");
-        let files = vec![
+        let paths = vec![
             PathBuf::from("/w/p/.env"),
             PathBuf::from("/w/p/dir/a b.txt"),
             PathBuf::from("/w/p/.git/xx.ts"),
             PathBuf::from("/elsewhere/c.txt"),
         ];
-        let (changed, added) = add_to_config(text, &files, project, false).unwrap();
+        let files: Vec<(PathBuf, bool)> = paths.iter().map(|p| (p.clone(), false)).collect();
+
+        // what the list of "gits add" is made of: .env is registered already
+        let (fresh, dropped) = not_registered(text, &paths, project).unwrap();
+        assert_eq!(fresh, paths[1..].to_vec());
+        assert_eq!(dropped, 1);
+        assert_eq!(shown(&paths[1], project), "dir/a b.txt");
+        assert_eq!(shown(&paths[2], project), ".git/xx.ts");
+        assert_eq!(shown(&paths[3], project), "/elsewhere/c.txt");
+
+        let (changed, added) = add_to_config(text, &files, project).unwrap();
         assert_eq!(
             added,
             vec![
-                "  \"../dir/a b.txt::${GITSTORAGETARGETDIR}/dir/a b.txt\"",
-                "  \"xx.ts::${GITSTORAGETARGETDIR}/xx.ts\"",
-                "  \"/elsewhere/c.txt::${GITSTORAGETARGETDIR}/elsewhere/c.txt\"",
+                "  \"../dir/a b.txt::${GITS_TARGETDIR}/dir/a b.txt\"",
+                "  \"xx.ts::${GITS_TARGETDIR}/xx.ts\"",
+                "  \"/elsewhere/c.txt::${GITS_TARGETDIR}/elsewhere/c.txt\"",
             ]
         );
         assert_eq!(
             changed,
-            "#!/bin/bash\nGITSTORAGETARGETDIR=\"d\"\n\nGITSTORAGELIST=(\n  \"gits.sh::${GITSTORAGETARGETDIR}/gits.sh\"\n\n  # comment\n  \"../.env::${GITSTORAGETARGETDIR}/.env\"\n  \"../dir/a b.txt::${GITSTORAGETARGETDIR}/dir/a b.txt\"\n  \"xx.ts::${GITSTORAGETARGETDIR}/xx.ts\"\n  \"/elsewhere/c.txt::${GITSTORAGETARGETDIR}/elsewhere/c.txt\"\n)\n\necho after\n"
+            "#!/bin/bash\nGITS_TARGETDIR=\"d\"\n\nGITS_LIST=(\n  \"gits.sh::${GITS_TARGETDIR}/gits.sh\"\n\n  # comment\n  \"../.env::${GITS_TARGETDIR}/.env\"\n  \"../dir/a b.txt::${GITS_TARGETDIR}/dir/a b.txt\"\n  \"xx.ts::${GITS_TARGETDIR}/xx.ts\"\n  \"/elsewhere/c.txt::${GITS_TARGETDIR}/elsewhere/c.txt\"\n)\n\necho after\n"
         );
 
         // second time: nothing to add
-        let (again, added) = add_to_config(&changed, &files, project, false).unwrap();
+        let (again, added) = add_to_config(&changed, &files, project).unwrap();
         assert!(added.is_empty());
         assert_eq!(again, changed);
     }
 
     #[test]
     fn add_encrypted_and_defaults() {
-        let text = "GITSTORAGELIST=(\n)\n";
-        let (changed, _) =
-            add_to_config(text, &[PathBuf::from("/w/p/.env")], Path::new("/w/p"), true).unwrap();
+        let text = "GITS_LIST=(\n)\n";
+        // encryption is decided per file
+        let files = [
+            (PathBuf::from("/w/p/.env"), true),
+            (PathBuf::from("/w/p/plain.txt"), false),
+        ];
+        let (changed, _) = add_to_config(text, &files, Path::new("/w/p")).unwrap();
         assert_eq!(
             changed,
-            "GITSTORAGELIST=(\n    \"../.env:e:$GITSTORAGETARGETDIR/.env\"\n)\n"
+            "GITS_LIST=(\n    \"../.env:e:$GITS_TARGETDIR/.env\"\n    \"../plain.txt::$GITS_TARGETDIR/plain.txt\"\n)\n"
         );
-        assert!(add_to_config("nothing here\n", &[], Path::new("/w/p"), false).is_err());
-        assert!(add_to_config(
-            "GITSTORAGELIST=( \"a::b\" )\n",
-            &[],
-            Path::new("/w/p"),
-            false
-        )
-        .is_err());
+        assert!(add_to_config("nothing here\n", &[], Path::new("/w/p")).is_err());
+        assert!(add_to_config("GITS_LIST=( \"a::b\" )\n", &[], Path::new("/w/p")).is_err());
     }
 }

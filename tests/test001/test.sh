@@ -1,15 +1,15 @@
 #
 # What gits does before any project is involved: the help, the version, wrong arguments,
-# and the env var GITSTORAGESOURCE which every command (except --help and --version) requires.
+# and the env var GITS_SOURCE which every command (except --help and --version) requires.
 #
 # What is tested, in this order:
 #
 #   1. --help with everything defined: the commands and --update are listed, the table of env vars
 #      shows the value found in env, nothing is marked as missing
-#   2. the table of env vars: for GITSTORAGETESHELL the default (/bin/bash) is the value in use when
+#   2. the table of env vars: for GITS_SHELL the default (/bin/bash) is the value in use when
 #      the variable is not defined, and the value from env wins when it is defined
 #   3. gits without arguments prints the same as gits --help
-#   4. GITSTORAGESOURCE not defined, and defined but empty (both mean the same):
+#   4. GITS_SOURCE not defined, and defined but empty (both mean the same):
 #        - --help still works (exit code 0) but marks the variable as MISSING and explains it
 #        - --version still works
 #        - every command of gits ends with exit code 1 and says that the variable is not defined
@@ -50,46 +50,46 @@ if [[ -d "${_DIR}/tmp" ]]; then
 fi
 
 # Shared setup: creates ${WORK} (= tmp/ next to this file) with an empty HOME, own git config and
-# an empty storage repository in ${WORK}/GITSTORAGESOURCE, goes to ${WORK}, and defines function "test"
+# an empty storage repository in ${WORK}/GITS_SOURCE, goes to ${WORK}, and defines function "test"
 # (bash/test.sh) and the helpers used below (gits, has, listing, stored, storage_commits, project, ...)
 source "${_DIR}/../_lib.sh"
 
-# The storage prepared by tests/_lib.sh. Remembered, because GITSTORAGESOURCE is unset and emptied
+# The storage prepared by tests/_lib.sh. Remembered, because GITS_SOURCE is unset and emptied
 # below and has to be put back afterwards.
-STORAGE="${GITSTORAGESOURCE}"
+STORAGE="${GITS_SOURCE}"
 
 # ---------- help with everything defined ----------
 
-# The help page with GITSTORAGESOURCE defined. "has" prints only those of the given fragments which
+# The help page with GITS_SOURCE defined. "has" prints only those of the given fragments which
 # are in the output:
 #   "gits state"               the list of commands is there
 #   "gits --update --check"    the update is described
 #   "variable"                 header of the table of env vars
-#   "GITSTORAGESOURCE | ..."   the row of the variable shows the value found in env
+#   "GITS_SOURCE | ..."   the row of the variable shows the value found in env
 #   "MISSING"                  must NOT be there (so it is not in EXPECTED_STDOUT): nothing required is missing
-COMMAND='gits --help 2>&1 | has "gits state" "gits --update --check" "variable" "GITSTORAGESOURCE            | ${STORAGE}" "MISSING"'
+COMMAND='gits --help 2>&1 | has "gits state" "gits --update --check" "variable" "GITS_SOURCE            | ${STORAGE}" "MISSING"'
 EXPECTED_STDOUT="gits state
 gits --update --check
 variable
-GITSTORAGESOURCE            | ${STORAGE}"
+GITS_SOURCE            | ${STORAGE}"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "--help: commands, update, table of env vars, value found in env, nothing is missing"
 
-# Only the row of GITSTORAGETESHELL from the table, with runs of spaces squeezed to one (tr -s),
+# Only the row of GITS_SHELL from the table, with runs of spaces squeezed to one (tr -s),
 # so the padding of the columns doesn't matter.
 # Columns: variable | found in env | default | used.
 # The variable is not defined here: "(not defined)", and the default /bin/bash is the value in use.
-COMMAND='gits --help 2>&1 | grep "^  GITSTORAGETESHELL  *|" | tr -s " "'
-EXPECTED_STDOUT=" GITSTORAGETESHELL | (not defined) | /bin/bash | /bin/bash"
+COMMAND='gits --help 2>&1 | grep "^  GITS_SHELL  *|" | tr -s " "'
+EXPECTED_STDOUT=" GITS_SHELL | (not defined) | /bin/bash | /bin/bash"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "--help: default value wins when env var is not defined"
 
 # The same row with the variable defined for this one call: the value from env is shown in the
 # second column and it is the one in use (last column), the default stays /bin/bash.
-COMMAND='GITSTORAGETESHELL=/bin/zsh gits --help 2>&1 | grep "^  GITSTORAGETESHELL  *|" | tr -s " "'
-EXPECTED_STDOUT=" GITSTORAGETESHELL | /bin/zsh | /bin/bash | /bin/zsh"
+COMMAND='GITS_SHELL=/bin/zsh gits --help 2>&1 | grep "^  GITS_SHELL  *|" | tr -s " "'
+EXPECTED_STDOUT=" GITS_SHELL | /bin/zsh | /bin/bash | /bin/zsh"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "--help: the value which wins is the one from env"
@@ -102,56 +102,60 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "no arguments is --help"
 
-# ---------- help doesn't fail without GITSTORAGESOURCE, but it says that it is a problem ----------
+# ---------- help doesn't fail without GITS_SOURCE, but it says that it is a problem ----------
 
-# Everything inside is executed twice: with GITSTORAGESOURCE removed from env ("unset") and with
-# GITSTORAGESOURCE defined as an empty text ("empty"). gits has to treat both the same.
+# Everything inside is executed twice: with GITS_SOURCE removed from env ("unset") and with
+# GITS_SOURCE defined as an empty text ("empty"). gits has to treat both the same.
 for VALUE in unset empty; do
   # prepare the env of this round
   if [[ "${VALUE}" == "unset" ]]; then
-    unset GITSTORAGESOURCE
+    unset GITS_SOURCE
   else
-    export GITSTORAGESOURCE=""
+    export GITS_SOURCE=""
   fi
 
   # The help must not fail without the required variable (exit code 0): it is the place where one
   # reads what is missing. It marks the variable as "MISSING (required)" and explains it below the table.
-  COMMAND='gits --help 2>&1 | has "MISSING (required)" "GITSTORAGESOURCE is not defined"'
+  COMMAND='gits --help 2>&1 | has "MISSING (required)" "GITS_SOURCE is not defined"'
   EXPECTED_STDOUT="MISSING (required)
-GITSTORAGESOURCE is not defined"
+GITS_SOURCE is not defined"
   EXPECTED_STDERR=""
   EXPECTED_CODE="0"
-  test "--help without GITSTORAGESOURCE (${VALUE})"
+  test "--help without GITS_SOURCE (${VALUE})"
 
   # The version needs nothing: still printed. "dev" is the version of a binary built by compile.sh.
   COMMAND='gits --version'
   EXPECTED_STDOUT="gits dev"
   EXPECTED_STDERR=""
   EXPECTED_CODE="0"
-  test "--version without GITSTORAGESOURCE (${VALUE})"
+  test "--version without GITS_SOURCE (${VALUE})"
 
-  # Every command of gits, one after another: without GITSTORAGESOURCE none of them starts to work.
+  # Every command of gits, one after another: without GITS_SOURCE none of them starts to work.
   for CMD in state find diff isinsync push pull url init add move migrate; do
     # The command ends with exit code 1 and the message which names the variable.
+    # isinsync ends with 2: for it 1 means "not in sync", and this is an error.
     # (COMMAND is in double quotes here: ${CMD} has to be put in now, by the loop.)
-    COMMAND="gits ${CMD} 2>&1 | has 'env var GITSTORAGESOURCE is not defined or empty'"
-    EXPECTED_STDOUT="env var GITSTORAGESOURCE is not defined or empty"
+    COMMAND="gits ${CMD} 2>&1 | has 'env var GITS_SOURCE is not defined or empty'"
+    EXPECTED_STDOUT="env var GITS_SOURCE is not defined or empty"
     EXPECTED_STDERR=""
     EXPECTED_CODE="1"
-    test "${CMD} without GITSTORAGESOURCE (${VALUE})"
+    if [[ "${CMD}" == "isinsync" ]]; then
+      EXPECTED_CODE="2"
+    fi
+    test "${CMD} without GITS_SOURCE (${VALUE})"
   done
 done
 
 # Names in ${WORK}: only what tests/_lib.sh prepared (the storage, the git config, the home directory).
 # None of the failed commands above left anything: no temporary clone, no config.
 COMMAND='listing "${WORK}"'
-EXPECTED_STDOUT="GITSTORAGESOURCE gitconfig home"
+EXPECTED_STDOUT="GITS_SOURCE gitconfig home"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "nothing was created"
 
 # the storage is defined again for the rest of the test
-export GITSTORAGESOURCE="${STORAGE}"
+export GITS_SOURCE="${STORAGE}"
 
 # ---------- wrong arguments ----------
 
@@ -192,7 +196,7 @@ test "isinsync without config"
 
 # Once more the names in ${WORK}: the commands refused in the last two sections created nothing either.
 COMMAND='listing "${WORK}"'
-EXPECTED_STDOUT="GITSTORAGESOURCE gitconfig home"
+EXPECTED_STDOUT="GITS_SOURCE gitconfig home"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "nothing was created at the end"

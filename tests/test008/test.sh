@@ -1,19 +1,19 @@
 #
 # What is tested here: "gits init" with a template, "gits url", "gits move", and that the config
-# (.git/gits.sh) really is a shell script executed by the shell from GITSTORAGETESHELL.
+# (.git/gits.sh) really is a shell script executed by the shell from GITS_SHELL.
 #
 # In this order:
 #
 #   1. gits init where it can't work: a directory which is not a repository, a repository without
 #      remote "origin". An error, and nothing is created.
-#   2. gits init with GITSTORAGETEMPLATE: a template which doesn't exist, a template without the line
-#      GITSTORAGETARGETDIR=, then a good one. In the good one only the value of GITSTORAGETARGETDIR is
+#   2. gits init with GITS_TEMPLATE: a template which doesn't exist, a template without the line
+#      GITS_TARGETDIR=, then a good one. In the good one only the value of GITS_TARGETDIR is
 #      replaced, the rest is copied as it is. Also a template given as "~/..." .
 #   3. gits url: prints where the project is in the storage, creates nothing.
 #   4. gits move: prints the steps to move a project to another remote, changes nothing.
 #   5. the config is executed: from the root of the project, its stdout and stderr are shown, elements
 #      added by a loop in the config are stored. isinsync doesn't show the stdout of the config.
-#   6. GITSTORAGETESHELL: a wrapper shell which leaves a trace proves that it was used; empty value
+#   6. GITS_SHELL: a wrapper shell which leaves a trace proves that it was used; empty value
 #      means the default /bin/bash; a shell which doesn't exist is an error; zsh works too (when installed).
 #   7. a config which calls "exit" can't be read: an error.
 #
@@ -46,7 +46,7 @@ if [[ -d "${_DIR}/tmp" ]]; then
 fi
 
 # the common setup of all tests: ${WORK} (tmp/ next to this file, from now on also the current
-# directory), own HOME and git config, an empty storage in ${WORK}/GITSTORAGESOURCE, function "test"
+# directory), own HOME and git config, an empty storage in ${WORK}/GITS_SOURCE, function "test"
 # and the helpers used inside of COMMAND (gits, has, listing, storage, storage_commits)
 source "${_DIR}/../_lib.sh"
 
@@ -75,7 +75,7 @@ git -C noremote init -q .
 # the part of the error message which is looked for (in a variable because of the quotes in it)
 F1="has no remote 'origin'"
 
-# GITSTORAGETARGETDIR is made from the url of remote "origin": without it init can't make the config.
+# GITS_TARGETDIR is made from the url of remote "origin": without it init can't make the config.
 # Error, exit code 1.
 COMMAND='cd noremote && gits init 2>&1 | has "${F1}"'
 EXPECTED_STDOUT="${F1}"
@@ -98,34 +98,34 @@ test "init without remote origin: nothing created"
 project repo "git@github.com:tmp/repo.git"
 cd repo
 
-# the template for the next checks. Quoted 'EEE': nothing is expanded here, $GITSTORAGETARGETDIR
-# stays as text. The line with GITSTORAGETARGETDIR is indented and has a value which has to be replaced.
+# the template for the next checks. Quoted 'EEE': nothing is expanded here, $GITS_TARGETDIR
+# stays as text. The line with GITS_TARGETDIR is indented and has a value which has to be replaced.
 cat <<'EEE' > "${WORK}/template.sh"
 # my template
-  GITSTORAGETARGETDIR="will be replaced"
-GITSTORAGELIST=(
-    "gits.sh::$GITSTORAGETARGETDIR/gits.sh"
-    "../from-template.txt::$GITSTORAGETARGETDIR/from-template.txt"
+  GITS_TARGETDIR="will be replaced"
+GITS_LIST=(
+    "gits.sh::$GITS_TARGETDIR/gits.sh"
+    "../from-template.txt::$GITS_TARGETDIR/from-template.txt"
 )
 EEE
 
-# GITSTORAGETEMPLATE points to a file which is not there: init says which path it tried and ends
+# GITS_TEMPLATE points to a file which is not there: init says which path it tried and ends
 # with 1, it doesn't fall back to the built-in template without a word
-COMMAND='GITSTORAGETEMPLATE="${WORK}/missing.sh" gits init 2>&1 | has "template GITSTORAGETEMPLATE=>${WORK}/missing.sh<"'
-EXPECTED_STDOUT="template GITSTORAGETEMPLATE=>${WORK}/missing.sh<"
+COMMAND='GITS_TEMPLATE="${WORK}/missing.sh" gits init 2>&1 | has "template GITS_TEMPLATE=>${WORK}/missing.sh<"'
+EXPECTED_STDOUT="template GITS_TEMPLATE=>${WORK}/missing.sh<"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "init, template which doesn't exist"
 
-# a file which exists but is not a template: no line starting with GITSTORAGETARGETDIR=
+# a file which exists but is not a template: no line starting with GITS_TARGETDIR=
 echo "no variable here" > "${WORK}/bad-template.sh"
 
 # init has nothing to replace in such a template, so it refuses it: error, exit code 1
-COMMAND='GITSTORAGETEMPLATE="${WORK}/bad-template.sh" gits init 2>&1 | has "there is no line starting with GITSTORAGETARGETDIR= in the template"'
-EXPECTED_STDOUT="there is no line starting with GITSTORAGETARGETDIR= in the template"
+COMMAND='GITS_TEMPLATE="${WORK}/bad-template.sh" gits init 2>&1 | has "there is no line starting with GITS_TARGETDIR= in the template"'
+EXPECTED_STDOUT="there is no line starting with GITS_TARGETDIR= in the template"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
-test "init, template without GITSTORAGETARGETDIR"
+test "init, template without GITS_TARGETDIR"
 
 # after the two failed inits: the project still has only .git in it ("listing" prints ".git"),
 # and .git has no gits.sh (the fragment "gits.sh" is looked for in the listing of .git and is not
@@ -137,7 +137,7 @@ EXPECTED_CODE="0"
 test "failed init creates nothing, no config"
 
 # the good template: init says that the config was generated and from which template. Exit code 0.
-COMMAND='GITSTORAGETEMPLATE="${WORK}/template.sh" gits init 2>&1 | has "generated (template ${WORK}/template.sh)"'
+COMMAND='GITS_TEMPLATE="${WORK}/template.sh" gits init 2>&1 | has "generated (template ${WORK}/template.sh)"'
 EXPECTED_STDOUT="generated (template ${WORK}/template.sh)"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
@@ -148,14 +148,14 @@ test "init with a template"
 # made from the remote (${D})
 COMMAND='cat .git/gits.sh'
 EXPECTED_STDOUT="# my template
-  GITSTORAGETARGETDIR=\"${D}\"
-GITSTORAGELIST=(
-    \"gits.sh::\$GITSTORAGETARGETDIR/gits.sh\"
-    \"../from-template.txt::\$GITSTORAGETARGETDIR/from-template.txt\"
+  GITS_TARGETDIR=\"${D}\"
+GITS_LIST=(
+    \"gits.sh::\$GITS_TARGETDIR/gits.sh\"
+    \"../from-template.txt::\$GITS_TARGETDIR/from-template.txt\"
 )"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
-test "config made from the template: only GITSTORAGETARGETDIR is changed"
+test "config made from the template: only GITS_TARGETDIR is changed"
 
 # again, with "~/" in the path of the template: the config made a moment ago is removed
 # (init does nothing when it is there) and the template is copied to the home of the test
@@ -163,12 +163,12 @@ rm .git/gits.sh
 cp "${WORK}/template.sh" "${HOME}/t.sh"
 
 # the line the generated config has to contain
-F1="GITSTORAGETARGETDIR=\"${D}\""
+F1="GITS_TARGETDIR=\"${D}\""
 
 # the template given as "~/t.sh" in quotes: the shell doesn't expand it, gits has to (HOME of the
 # test is ${WORK}/home). The output of init is not interesting here: first line is its exit code (0),
-# second line proves that the config was made and has the right GITSTORAGETARGETDIR.
-COMMAND='GITSTORAGETEMPLATE="~/t.sh" gits init > /dev/null 2>&1; echo "${?}"; cat .git/gits.sh | has "${F1}"'
+# second line proves that the config was made and has the right GITS_TARGETDIR.
+COMMAND='GITS_TEMPLATE="~/t.sh" gits init > /dev/null 2>&1; echo "${?}"; cat .git/gits.sh | has "${F1}"'
 EXPECTED_STDOUT="0
 ${F1}"
 EXPECTED_STDERR=""
@@ -182,7 +182,7 @@ test "init with a template in home"
 # directory in it. The second line (".git") is "listing": url created nothing in the project,
 # also no temporary clone.
 COMMAND='gits url 2>&1; listing'
-EXPECTED_STDOUT="final url ${GITSTORAGESOURCE} (directory ${D})
+EXPECTED_STDOUT="final url ${GITS_SOURCE} (directory ${D})
 .git"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
@@ -198,10 +198,10 @@ test "url of a storage which is a directory, url creates nothing"
 # F6     - the new line for .git/gits.sh
 F1="from: git@xxx:project__source-repo.git"
 F2="to:   git@yyy:other__target-repo.git"
-F3="git clone \"${GITSTORAGESOURCE}\" ."
+F3="git clone \"${GITS_SOURCE}\" ."
 F4='git mv "git@xxx:project__source-repo.git" "git@yyy:other__target-repo.git"'
 F5='git remote set-url origin "git@yyy:other/target-repo.git"'
-F6='GITSTORAGETARGETDIR="git@yyy:other__target-repo.git"'
+F6='GITS_TARGETDIR="git@yyy:other__target-repo.git"'
 
 # gits move only prints instructions. All six fragments have to be in its output (has prints
 # them in the order they were given), exit code 0.
@@ -231,7 +231,7 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "move with one argument"
 
-# ---------- the config is executed: from the root of the project, by the shell from GITSTORAGETESHELL ----------
+# ---------- the config is executed: from the root of the project, by the shell from GITS_SHELL ----------
 
 # two files which the config below will find; three.txt is not created on purpose
 echo "one" > one.txt
@@ -242,19 +242,19 @@ echo "two" > two.txt
 #   - prints a line to stderr
 #   - adds an element to the list for each of one.txt, two.txt, three.txt which exists
 cat <<EEE > .git/gits.sh
-GITSTORAGETARGETDIR="${D}"
+GITS_TARGETDIR="${D}"
 
 echo "config says: pwd is \$(pwd)"
 echo "config warns on stderr" >&2
 
-GITSTORAGELIST=(
-    "gits.sh::\$GITSTORAGETARGETDIR/gits.sh"
+GITS_LIST=(
+    "gits.sh::\$GITS_TARGETDIR/gits.sh"
 )
 
 # elements computed while the config runs
 for NAME in one two three; do
   if [ -f "\${NAME}.txt" ]; then
-    GITSTORAGELIST+=("../\${NAME}.txt::\$GITSTORAGETARGETDIR/computed/\${NAME}.txt")
+    GITS_LIST+=("../\${NAME}.txt::\$GITS_TARGETDIR/computed/\${NAME}.txt")
   fi
 done
 EEE
@@ -305,30 +305,30 @@ EEE
 # it is started as a program, so it has to be executable
 chmod +x "${WORK}/myshell"
 
-# isinsync with GITSTORAGETESHELL pointing to the wrapper. First line: exit code of gits (0, the
+# isinsync with GITS_SHELL pointing to the wrapper. First line: exit code of gits (0, the
 # config was read fine). Second line: the log has "called" exactly once, so gits executed the config
 # with this shell and with nothing else.
-COMMAND='GITSTORAGETESHELL="${WORK}/myshell" gits isinsync 2> /dev/null; echo "${?}"; cat "${WORK}/myshell.log"'
+COMMAND='GITS_SHELL="${WORK}/myshell" gits isinsync 2> /dev/null; echo "${?}"; cat "${WORK}/myshell.log"'
 EXPECTED_STDOUT="0
 called"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
-test "the config was executed by the shell from GITSTORAGETESHELL"
+test "the config was executed by the shell from GITS_SHELL"
 
-# GITSTORAGETESHELL defined but empty is the same as not defined: /bin/bash is used. Exit code 0,
+# GITS_SHELL defined but empty is the same as not defined: /bin/bash is used. Exit code 0,
 # and the log still has one line only: the wrapper was not called this time.
-COMMAND='GITSTORAGETESHELL="" gits isinsync 2> /dev/null; echo "${?}"; cat "${WORK}/myshell.log"'
+COMMAND='GITS_SHELL="" gits isinsync 2> /dev/null; echo "${?}"; cat "${WORK}/myshell.log"'
 EXPECTED_STDOUT="0
 called"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
-test "empty GITSTORAGETESHELL: default is used, the wrapper was not called again"
+test "empty GITS_SHELL: default is used, the wrapper was not called again"
 
 # the error which names the variable and the value which is wrong
-F1="can't run shell GITSTORAGETESHELL=>${WORK}/no-such-shell<"
+F1="can't run shell GITS_SHELL=>${WORK}/no-such-shell<"
 
 # a shell which doesn't exist can't execute the config: error with the path, exit code 1
-COMMAND='GITSTORAGETESHELL="${WORK}/no-such-shell" gits diff 2>&1 | has "${F1}"'
+COMMAND='GITS_SHELL="${WORK}/no-such-shell" gits diff 2>&1 | has "${F1}"'
 EXPECTED_STDOUT="${F1}"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
@@ -336,10 +336,10 @@ test "shell which doesn't exist"
 
 # the same config executed by zsh, only where zsh is installed (CI installs it)
 if command -v zsh > /dev/null 2>&1; then
-  # GITSTORAGETESHELL is the full path of zsh. ZDOTDIR is the empty HOME of the test, so no startup
+  # GITS_SHELL is the full path of zsh. ZDOTDIR is the empty HOME of the test, so no startup
   # file of the developer is read. The config is valid zsh too: diff says "files are in sync"
   # (everything was pushed above) and ends with 0.
-  COMMAND='ZDOTDIR="${HOME}" GITSTORAGETESHELL="$(command -v zsh)" gits diff 2>&1 | has "files are in sync"'
+  COMMAND='ZDOTDIR="${HOME}" GITS_SHELL="$(command -v zsh)" gits diff 2>&1 | has "files are in sync"'
   EXPECTED_STDOUT="files are in sync"
   EXPECTED_STDERR=""
   EXPECTED_CODE="0"

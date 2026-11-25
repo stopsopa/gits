@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::cli::{cli, Options};
 use crate::config::{self, Project};
+use crate::events;
 use crate::socket::Lazy;
 use crate::util::{
     copy_file, git, git_out, green, interrupted, random_hex, red, unique_sibling, yellow,
@@ -61,6 +62,7 @@ impl Temp {
             if !quiet {
                 println!("_TARGETGITDIR: {}", path.display());
             }
+            events::set("GITS_EVENT_TEMP_DIR", path.display().to_string());
             return Ok(Temp { path, quiet });
         }
     }
@@ -74,7 +76,11 @@ impl Drop for Temp {
                 yellow(&format!("\ngits cleaning {}", self.path.display()))
             );
         }
+        // nothing can be stopped here any more: a failing script is only reported
+        let args = [self.path.display().to_string()];
+        events::fire_quietly("BEFORE_CLEANUP", &args, &[]);
         let _ = fs::remove_dir_all(&self.path);
+        events::fire_quietly("AFTER_CLEANUP", &args, &[]);
     }
 }
 
@@ -93,6 +99,9 @@ impl Storage {
             Ok(p) => p.to_string_lossy().to_string(),
             Err(_) => source.to_string(),
         };
+        let event_args = [dest.display().to_string()];
+        events::fire("BEFORE_CLONE", &event_args, &[])?;
+
         let mut args = vec!["clone"];
         if quiet {
             args.push("-q");
@@ -109,13 +118,16 @@ impl Storage {
         } else {
             git(dest, &args, false)
         };
-        cloned.map_err(|e| format!("can't clone storage GITSTORAGESOURCE=>{source}<: {e}"))?;
+        cloned.map_err(|e| format!("can't clone storage GITS_SOURCE=>{source}<: {e}"))?;
 
         let branch = git_out(dest, &["symbolic-ref", "--short", "HEAD"])
             .unwrap_or_else(|_| "master".to_string());
         let base = git_out(dest, &["rev-parse", "--verify", "-q", "HEAD"])
             .ok()
             .filter(|s| !s.is_empty());
+
+        events::set("GITS_EVENT_STORAGE_BRANCH", branch.clone());
+        events::fire("AFTER_CLONE", &event_args, &[])?;
 
         Ok(Storage {
             root: dest.to_path_buf(),
@@ -151,6 +163,76 @@ pub enum Outcome {
     Missing,
 }
 
+// what the lifecycle scripts know about the project from now on
+fn project_context(dir: &Path, project: &Project) {
+    events::set("GITS_EVENT_PROJECT_DIR", dir.display().to_string());
+    events::set(
+        "GITS_EVENT_CONFIG",
+        config::config_path(dir).display().to_string(),
+    );
+    events::set("GITS_TARGETDIR", project.target_dir.clone());
+    events::set("GITS_EVENT_LIST_COUNT", project.list.len().to_string());
+    let list: Vec<String> = project
+        .list
+        .iter()
+        .map(|e| {
+            format!(
+                "{}\t{}\t{}",
+                if e.encrypted { "e" } else { "p" },
+                e.source.display(),
+                e.target
+            )
+        })
+        .collect();
+    events::set("GITS_EVENT_LIST", list.join("\n"));
+}
+
+fn storage_context(storage: &Storage, project: &Project) {
+    events::set(
+        "GITS_EVENT_STORAGE_DIR",
+        storage.root.join(&project.target_dir).display().to_string(),
+    );
+}
+
+// one of the per-file events: BEFORE_/AFTER_ DECRYPT, COPY, ENCRYPT
+fn file_event(
+    event: &str,
+    storage: &Storage,
+    project: &Project,
+    entry: &config::Entry,
+    plain: Option<&Path>,
+) -> Result<(), String> {
+    let stored = storage.root.join(&entry.target);
+    let index = project
+        .list
+        .iter()
+        .position(|e| e == entry)
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    let mut vars = vec![
+        ("GITS_EVENT_FILE_SOURCE", entry.source.display().to_string()),
+        ("GITS_EVENT_FILE_SOURCE_RAW", entry.raw_source.clone()),
+        ("GITS_EVENT_FILE_TARGET", entry.target.clone()),
+        ("GITS_EVENT_FILE_STORED", stored.display().to_string()),
+        (
+            "GITS_EVENT_FILE_ENCRYPTED",
+            if entry.encrypted { "1" } else { "0" }.to_string(),
+        ),
+        ("GITS_EVENT_FILE_INDEX", index.to_string()),
+    ];
+    if let Some(plain) = plain {
+        vars.push(("GITS_EVENT_FILE_PLAIN", plain.display().to_string()));
+    }
+    events::fire(
+        event,
+        &[
+            entry.source.display().to_string(),
+            stored.display().to_string(),
+        ],
+        &vars,
+    )
+}
+
 /**
  * Files which are stored encrypted are decrypted inside the clone and committed there (the commit
  * never leaves the temporary directory). After that the clone looks as if the storage held plain
@@ -173,6 +255,7 @@ fn decrypted_view(
         if !stored.is_file() {
             continue;
         }
+        file_event("BEFORE_DECRYPT", storage, project, entry, None)?;
         let plain = unique_sibling(&stored);
         match enc.get()?.decode(&stored, &plain) {
             Ok(()) => {
@@ -197,6 +280,7 @@ fn decrypted_view(
                 return Err(format!("can't decrypt '{}': {e}", entry.target));
             }
         }
+        file_event("AFTER_DECRYPT", storage, project, entry, None)?;
     }
 
     if changed {
@@ -219,7 +303,9 @@ fn copy_sources(storage: &Storage, project: &Project) -> Result<bool, String> {
     let mut missing = false;
     for entry in &project.list {
         if entry.source.is_file() {
+            file_event("BEFORE_COPY", storage, project, entry, None)?;
             copy_file(&entry.source, &storage.root.join(&entry.target))?;
+            file_event("AFTER_COPY", storage, project, entry, None)?;
         } else {
             missing = true;
             eprintln!(
@@ -241,16 +327,39 @@ pub fn check(
     enc: &mut Lazy,
     quiet: bool,
 ) -> Result<Outcome, String> {
+    storage_context(storage, project);
     decrypted_view(storage, project, enc, quiet)?;
-    if copy_sources(storage, project)? {
-        return Ok(Outcome::Missing);
-    }
-    let status = storage.status()?;
-    if status.trim().is_empty() {
-        Ok(Outcome::InSync)
+    let missing = copy_sources(storage, project)?;
+
+    events::fire("BEFORE_COMPARE", &[], &[])?;
+    let outcome = if missing {
+        Outcome::Missing
+    } else if storage.status()?.trim().is_empty() {
+        Outcome::InSync
     } else {
-        Ok(Outcome::Differs)
-    }
+        Outcome::Differs
+    };
+    let result = match outcome {
+        Outcome::InSync => "insync",
+        Outcome::Differs => "differs",
+        Outcome::Missing => "missing",
+    };
+    let changed: Vec<String> = match outcome {
+        Outcome::InSync => Vec::new(),
+        _ => changed_sources(storage, project)
+            .iter()
+            .map(|entry| entry.source.display().to_string())
+            .collect(),
+    };
+    events::fire(
+        "AFTER_COMPARE",
+        &[result.to_string()],
+        &[
+            ("GITS_EVENT_RESULT", result.to_string()),
+            ("GITS_EVENT_CHANGED", changed.join("\n")),
+        ],
+    )?;
+    Ok(outcome)
 }
 
 /**
@@ -322,7 +431,15 @@ fn load(ctx: &Ctx, quiet: bool) -> Result<Project, String> {
     if !quiet {
         print!("{}", loaded.output);
     }
+    loaded_event(&ctx.cwd, &loaded)?;
     Ok(loaded.project)
+}
+
+// the config was executed: its scripts join the ones of the environment, and CONFIG_LOADED fires
+fn loaded_event(dir: &Path, loaded: &config::Loaded) -> Result<(), String> {
+    project_context(dir, &loaded.project);
+    events::set_config_scripts(loaded.scripts.clone());
+    events::fire("CONFIG_LOADED", &[], &[])
 }
 
 // directory where "git diff" / "git status" are run: the one of the project when the storage has it
@@ -404,20 +521,24 @@ fn changed_targets(status: &str) -> HashSet<String> {
  * in a terminal of an editor a path can be clicked to open the file.
  * Printed after "git status", just above the final url.
  */
-fn changed_files(storage: &Storage, project: &Project) {
+fn changed_sources<'a>(storage: &Storage, project: &'a Project) -> Vec<&'a config::Entry> {
     let status = match sgit_out(
         &storage.root,
         &["status", "--porcelain", "-z", "--untracked-files=all"],
     ) {
         Ok(status) => status,
-        Err(_) => return,
+        Err(_) => return Vec::new(),
     };
     let changed = changed_targets(&status);
-    let files: Vec<&config::Entry> = project
+    project
         .list
         .iter()
         .filter(|entry| changed.contains(&entry.target))
-        .collect();
+        .collect()
+}
+
+fn changed_files(storage: &Storage, project: &Project) {
+    let files = changed_sources(storage, project);
     if files.is_empty() {
         return;
     }
@@ -498,6 +619,7 @@ pub fn push(ctx: &Ctx, yes: bool) -> Result<i32, String> {
 
     let temp = Temp::create(&ctx.cwd, false)?;
     let storage = Storage::clone(&ctx.source, &temp.path, false)?;
+    storage_context(&storage, &project);
     let mut enc = Lazy::new(ctx.socket.clone());
     let mut missing = false;
 
@@ -520,7 +642,9 @@ pub fn push(ctx: &Ctx, yes: bool) -> Result<i32, String> {
                 "{}",
                 yellow(&format!("'{}' -> '{}'", entry.raw_source, entry.target))
             );
+            file_event("BEFORE_COPY", &storage, &project, entry, None)?;
             copy_file(&entry.source, &stored)?;
+            file_event("AFTER_COPY", &storage, &project, entry, None)?;
             continue;
         }
 
@@ -536,6 +660,7 @@ pub fn push(ctx: &Ctx, yes: bool) -> Result<i32, String> {
         // left byte for byte as it is, whatever the encoder would produce for the same content.
         let mut unchanged = false;
         if stored.is_file() {
+            file_event("BEFORE_DECRYPT", &storage, &project, entry, None)?;
             let plain = unique_sibling(&stored);
             let decoded = enc.get()?.decode(&stored, &plain);
             match decoded {
@@ -555,6 +680,7 @@ pub fn push(ctx: &Ctx, yes: bool) -> Result<i32, String> {
                     return Err(format!("can't decrypt '{}': {e}", entry.target));
                 }
             }
+            file_event("AFTER_DECRYPT", &storage, &project, entry, None)?;
         }
 
         if !unchanged {
@@ -562,11 +688,17 @@ pub fn push(ctx: &Ctx, yes: bool) -> Result<i32, String> {
             // The existing target is the "previous version" for the encoder: lines which were not edited stay as they are.
             let raw = unique_sibling(&stored);
             copy_file(&entry.source, &raw)?;
+            // a script which stops the push here must not leave the plain copy behind
+            if let Err(e) = file_event("BEFORE_ENCRYPT", &storage, &project, entry, Some(&raw)) {
+                let _ = fs::remove_file(&raw);
+                return Err(e);
+            }
             let encoded = enc
                 .get()
                 .and_then(|e| e.encode(&raw, &stored).map_err(|e| e.to_string()));
             let _ = fs::remove_file(&raw);
             encoded.map_err(|e| format!("can't encrypt '{}': {e}", entry.raw_source))?;
+            file_event("AFTER_ENCRYPT", &storage, &project, entry, None)?;
         }
     }
 
@@ -576,10 +708,18 @@ pub fn push(ctx: &Ctx, yes: bool) -> Result<i32, String> {
         return Ok(if missing { 1 } else { 0 });
     }
 
+    events::fire("BEFORE_COMMIT", &[], &[])?;
     sgit(&storage.root, &["add", "-A"], false)?;
     let message = format!("gits push {}", project.target_dir);
     sgit(&storage.root, &["commit", "-q", "-m", &message], false)?;
+    let commit = git_out(&storage.root, &["rev-parse", "HEAD"]).unwrap_or_default();
+    let commit_args = [commit.clone()];
+    let commit_vars = [("GITS_EVENT_COMMIT", commit)];
+    events::fire("AFTER_COMMIT", &commit_args, &commit_vars)?;
+
+    events::fire("BEFORE_PUSH", &commit_args, &commit_vars)?;
     sgit(&storage.root, &["push", "origin", "HEAD"], false)?;
+    events::fire("AFTER_PUSH", &commit_args, &commit_vars)?;
 
     println!("{}", green("\n    files pushed\n"));
     final_url(ctx, &storage, &project);
@@ -599,7 +739,12 @@ pub fn push(ctx: &Ctx, yes: bool) -> Result<i32, String> {
  * Ok(false): the storage has no such file, nothing was done (said on stderr).
  * Err: the file could not be decrypted or written, the local file is as it was.
  */
-fn pull_entry(storage: &Storage, entry: &config::Entry, enc: &mut Lazy) -> Result<bool, String> {
+fn pull_entry(
+    storage: &Storage,
+    project: &Project,
+    entry: &config::Entry,
+    enc: &mut Lazy,
+) -> Result<bool, String> {
     let stored = storage.root.join(&entry.target);
     if !stored.is_file() {
         eprintln!(
@@ -620,13 +765,26 @@ fn pull_entry(storage: &Storage, entry: &config::Entry, enc: &mut Lazy) -> Resul
     );
 
     if !entry.encrypted {
+        file_event("BEFORE_COPY", storage, project, entry, None)?;
         copy_file(&stored, &entry.source)?;
+        file_event("AFTER_COPY", storage, project, entry, None)?;
         return Ok(true);
     }
 
     // decrypted next to the stored file first: a failed decryption never touches the local file
+    file_event("BEFORE_DECRYPT", storage, project, entry, None)?;
     let plain = unique_sibling(&stored);
     let decoded = enc.get()?.decode(&stored, &plain);
+    if decoded.is_ok() || decoded.as_ref().is_err_and(|e| e.malformed()) {
+        if let Err(e) = file_event("AFTER_DECRYPT", storage, project, entry, Some(&plain)) {
+            let _ = fs::remove_file(&plain);
+            return Err(e);
+        }
+        if let Err(e) = file_event("BEFORE_COPY", storage, project, entry, Some(&plain)) {
+            let _ = fs::remove_file(&plain);
+            return Err(e);
+        }
+    }
     let result = match decoded {
         Ok(()) => copy_file(&plain, &entry.source),
         Err(e) if e.malformed() => {
@@ -642,7 +800,9 @@ fn pull_entry(storage: &Storage, entry: &config::Entry, enc: &mut Lazy) -> Resul
         Err(e) => Err(format!("can't decrypt '{}': {e}", entry.target)),
     };
     let _ = fs::remove_file(&plain);
-    result.map(|_| true)
+    result?;
+    file_event("AFTER_COPY", storage, project, entry, None)?;
+    Ok(true)
 }
 
 pub fn pull(ctx: &Ctx, yes: bool) -> Result<i32, String> {
@@ -653,6 +813,7 @@ pub fn pull(ctx: &Ctx, yes: bool) -> Result<i32, String> {
     let mut project = load(ctx, false)?;
     let temp = Temp::create(&ctx.cwd, false)?;
     let storage = Storage::clone(&ctx.source, &temp.path, false)?;
+    storage_context(&storage, &project);
     let mut enc = Lazy::new(ctx.socket.clone());
     let mut failed = false;
 
@@ -670,7 +831,7 @@ pub fn pull(ctx: &Ctx, yes: bool) -> Result<i32, String> {
         .position(|entry| entry.source == config_file);
     if let Some(at) = own {
         let before = fs::read(&config_file).ok();
-        pull_entry(&storage, &project.list[at], &mut enc)?;
+        pull_entry(&storage, &project, &project.list[at], &mut enc)?;
         if fs::read(&config_file).ok() != before {
             println!(
                 "{}",
@@ -689,7 +850,7 @@ pub fn pull(ctx: &Ctx, yes: bool) -> Result<i32, String> {
         if own.is_some() && entry.source == config_file {
             continue;
         }
-        if let Err(e) = pull_entry(&storage, entry, &mut enc) {
+        if let Err(e) = pull_entry(&storage, &project, entry, &mut enc) {
             failed = true;
             eprintln!("{}", red(&format!("gits error: {e}")));
         }
@@ -708,7 +869,7 @@ pub fn pull(ctx: &Ctx, yes: bool) -> Result<i32, String> {
 }
 
 pub fn state(ctx: &Ctx) -> Result<i32, String> {
-    let found = config::find(&ctx.cwd);
+    let found = config::find(&ctx.cwd)?;
 
     if found.is_empty() {
         println!("\n  nothing found\n");
@@ -741,15 +902,58 @@ pub fn state(ctx: &Ctx) -> Result<i32, String> {
         let dir = fs::canonicalize(&dir).unwrap_or(dir);
         println!("\n  cd \"{}\"\n  gits diff\n", dir.display());
 
-        let loaded = match config::load(&dir, false) {
+        // what the scripts know about the previous project is gone, its own scripts too
+        events::set_config_scripts(Default::default());
+        for name in [
+            "GITS_EVENT_CONFIG",
+            "GITS_TARGETDIR",
+            "GITS_EVENT_LIST_COUNT",
+            "GITS_EVENT_LIST",
+            "GITS_EVENT_STORAGE_DIR",
+        ] {
+            events::unset(name);
+        }
+        events::set("GITS_EVENT_PROJECT_DIR", dir.display().to_string());
+        let index_vars = [
+            ("GITS_EVENT_STATE_INDEX", (i + 1).to_string()),
+            ("GITS_EVENT_STATE_COUNT", count.to_string()),
+        ];
+        events::fire(
+            "BEFORE_PROJECT",
+            &[
+                dir.display().to_string(),
+                (i + 1).to_string(),
+                count.to_string(),
+            ],
+            &index_vars,
+        )?;
+        // however the check of this project ends
+        let after = |result: &str, success: usize, errors: usize| {
+            events::fire(
+                "AFTER_PROJECT",
+                &[dir.display().to_string(), result.to_string()],
+                &[
+                    index_vars[0].clone(),
+                    index_vars[1].clone(),
+                    ("GITS_EVENT_RESULT", result.to_string()),
+                    ("GITS_EVENT_COUNT_SUCCESS", success.to_string()),
+                    ("GITS_EVENT_COUNT_ERROR", errors.to_string()),
+                ],
+            )
+        };
+
+        let loaded = match config::load(&dir, false).and_then(|l| {
+            print!("{}", l.output);
+            loaded_event(&dir, &l).map(|_| l)
+        }) {
             Ok(l) => l,
             Err(e) => {
                 println!("{}", red(&format!("gits error: {e}")));
                 errors += 1;
+                after("error", success, errors)?;
                 continue;
             }
         };
-        print!("{}", loaded.output);
 
         // one clone for all projects, made when the first of them needs it
         match &storage {
@@ -777,10 +981,11 @@ pub fn state(ctx: &Ctx) -> Result<i32, String> {
         }
         let storage = storage.as_ref().unwrap();
 
-        match check(storage, &loaded.project, &mut enc, false) {
+        let result = match check(storage, &loaded.project, &mut enc, false) {
             Ok(Outcome::InSync) => {
                 println!("{}", green("    files are in sync"));
                 success += 1;
+                "insync"
             }
             Ok(Outcome::Missing) => {
                 println!(
@@ -788,18 +993,22 @@ pub fn state(ctx: &Ctx) -> Result<i32, String> {
                     red("    files are not in sync - at least one source file is missing")
                 );
                 errors += 1;
+                "missing"
             }
             Ok(Outcome::Differs) => {
                 println!("{}", red("    files are not in sync"));
                 let _ = sgit(&storage.root, &["add", "-A", "-N"], true);
                 let _ = sgit(&storage.root, &["status"], false);
                 errors += 1;
+                "differs"
             }
             Err(e) => {
                 println!("{}", red(&format!("gits error: {e}")));
                 errors += 1;
+                "error"
             }
-        }
+        };
+        after(result, success, errors)?;
     }
 
     println!();

@@ -1,204 +1,87 @@
-# Lifecycle events: requirements
+# Lifecycle events: requirements and decisions
 
-Status: **not implemented yet.** This file collects what was asked for, refined, plus the
-proposals and open questions which have to be answered before the implementation starts
-(chapter [Open questions](#open-questions)).
+Status: **implemented.** The documentation for users is [LIFECYCLE.md](LIFECYCLE.md). This file
+is the record of what was asked for, how it was refined, and what was decided.
 
 ## What was asked for
 
-1. Every gits command has stages (clone, decrypt, copy, diff, encrypt, commit, push, ...).
-   Between the stages gits runs **lifecycle scripts** defined in env vars:
+1. Every gits command has stages (clone, decrypt, copy, compare, encrypt, commit, push, ...).
+   Between the stages gits runs **lifecycle scripts** defined in env vars, one family per command:
+   `..._STATE_<EVENT>`, `..._DIFF_<EVENT>`, `..._PULL_<EVENT>`, `..._PUSH_<EVENT>`, and so on.
+2. The scripts are executed by the shell which runs the config (`GITS_SHELL`, was `GITSTORAGETESHELL`).
+3. Every script gets everything gits has at hand ("assume everything what moves is useful"):
+   the native env vars of `ENVVARS.md`, the current event, the directory where gits was called,
+   the temporary directory, the name of the repository, and so on.
+4. A script has to know which event it is, also when one command fires the same kind of event
+   more than once (before / after encrypt of every file): such events are numbered.
+5. `LIFECYCLE.md`: for each command what happens after what, in stages, with ascii graphs, and
+   for every event its variable and what is injected into it (env vars and arguments).
+6. Tests which register all the variables; each script dumps what it sees, and the dumps stay
+   after the test.
+7. This file.
 
-   ```
-   GITSTORAGE_STATE_<EVENT NAME>
-   GITSTORAGE_DIFF_<EVENT NAME>
-   GITSTORAGE_PULL_<EVENT NAME>
-   GITSTORAGE_PUSH_<EVENT NAME>
-   ... and so on, for each command
-   ```
+## Decisions (answers to the questions asked before the implementation)
 
-2. The scripts are executed by the shell from `GITSTORAGETESHELL` (default `/bin/bash`), the
-   same shell which runs `.git/gits.sh`.
-
-3. Every script gets **everything gits knows at that moment**, as env vars and arguments
-   ("assume everything what moves is useful"):
-   - all native env vars of `ENVVARS.md`: `GITSTORAGESOURCE`, `GITSTORAGETARGETDIR`,
-     `GITSTORAGETEMPLATE`, `GITSTORAGETESHELL`, `GITSTORAGETENCRYPTIONSOCKET`
-   - the current event
-   - the directory where the gits command was called
-   - the path of the temporary directory (the clone of the storage)
-   - the name of the repository, and whatever else is at hand
-
-4. A script has to be able to know **which event it is**, also when one command fires the
-   same kind of event more than once (`before encrypt` / `after encrypt` for every file):
-   such events are numbered.
-
-5. `LIFECYCLE.md`: documentation for each command (`gits state`, `gits diff`, `gits pull`, ...)
-   describing in stages what happens after what, with ascii graphs with arrows, and for every
-   event: its env var name, and which env vars and arguments are injected into it.
-
-6. New test cases: every event env var is registered, each script dumps everything it sees,
-   and (as in the other tests) the dumps stay in `tests/testNNN/tmp/` after the test to look at.
-
-7. This file: the requirements above, refined.
-
-## Proposal
-
-### How a script is defined and run
-
-- The value of the env var is a **command line**, run as `$GITSTORAGETESHELL -c "<value>"`.
-  So it can be a path to a script or anything inline:
-
-  ```sh
-  export GITSTORAGE_PUSH_AFTER_PUSH='/bin/bash ~/.gits/hooks/after-push.sh'
-  export GITSTORAGE_DIFF_END='echo "diff ended with $GITS_EVENT_EXIT_CODE"'
-  ```
-
-- An event whose env var is not defined (or empty) costs nothing: no process is started.
-- Working directory of the script: the root of the project (for `state`: the directory where
-  `gits state` was called, and the project being checked is in an env var).
-- stdout and stderr of the script are shown as they come. In `gits isinsync` (which must print
-  nothing on stdout) stdout of the script goes to stderr.
-- The script is started through `src/cli.rs`, like every other program.
-
-### Names of the events
-
-`GITSTORAGE_<COMMAND>_<EVENT>`, where `<COMMAND>` is one of `STATE FIND INIT ADD DIFF ISINSYNC
-PUSH PULL URL MOVE MIGRATE UPDATE`.
-
-Events which every command has:
-
-| Event | When |
-|---|---|
-| `START` | arguments are read, nothing else happened |
-| `END` | the last thing before gits exits, always (also after an error or Ctrl+C). The exit code is known |
-| `ERROR` | an error is about to be reported. The message is known |
-
-Events of the commands which use the storage (`DIFF ISINSYNC PUSH PULL`, and `STATE` per project):
-
-| Event | When | Fired |
+| # | Question | Decision |
 |---|---|---|
-| `CONFIG_LOADED` | `.git/gits.sh` was executed, the list is known | once |
-| `BEFORE_CLONE` / `AFTER_CLONE` | around `git clone` of the storage into the temporary directory | once |
-| `BEFORE_DECRYPT` / `AFTER_DECRYPT` | around the decryption of one stored `:e:` file | per encrypted file |
-| `BEFORE_COPY` / `AFTER_COPY` | around the copy of one file (SOURCE -> clone, or clone -> SOURCE for `pull`) | per file |
-| `BEFORE_COMPARE` / `AFTER_COMPARE` | around `git status` which decides "in sync or not". After: the result and the changed files are known | once |
-| `BEFORE_ENCRYPT` / `AFTER_ENCRYPT` | `push`: around the encryption of one file (the plain copy `TARGET.hash…` exists) | per encrypted file |
-| `BEFORE_COMMIT` / `AFTER_COMMIT` | `push`: around `git commit` in the clone | once |
-| `BEFORE_PUSH` / `AFTER_PUSH` | `push`: around `git push` to the storage | once |
-| `BEFORE_CLEANUP` / `AFTER_CLEANUP` | around the removal of the temporary directory | once |
+| 1 | Can a script stop the command? | Yes: `START` and `BEFORE_*` with a non-zero exit code stop it (cleanup, `ERROR`, `END` still happen). A failing `AFTER_*` / `END` / `ERROR` script is a warning. (Proposed, not objected to.) |
+| 2 | Catch-all variables | Yes: `GITS_ALL` and `GITS_<COMMAND>_ALL`. The script is told which event it is (`GITS_EVENT`, `GITS_EVENT_NAME`, `$1`) and which variable called it (`GITS_EVENT_TRIGGER`); the numbering (`GITS_EVENT_SEQ`, `GITS_EVENT_INDEX`) applies to them too. |
+| 3 | Scripts defined per project | Yes: `.git/gits.sh` can define the same variables. Documented in LIFECYCLE.md; README restructured from the easiest use to the hardest (encryption near the end) with a link to LIFECYCLE.md. |
+| 4 | Prefix of the injected variables | `GITS_EVENT_*`. And beyond the question: **every** variable of the project is `GITS_*` now, nothing starts with `GITSTORAGE` any more (table below). |
+| 5 | Value: command line or path? | **A path to a script**, `~/` allowed. Not a command line. The shell is chosen with `GITS_SHELL`, and inside of a script anything can be started. |
+| 6 | Nested gits | No recursion at all: gits started from inside of a script runs no scripts (`GITS_EVENT_RUNNING`). |
+| 7 | `gits events` | Yes: lists every event of every command and what is defined now; mentioned in `--help` and in the docs. |
+| 8 | Events for every command | Yes, also `find`, `url`, `move`, `init`, `add`, `migrate`, `--update`. |
+| 9 | Per-file events in `state` | Kept. |
 
-`STATE` in addition: `FOUND` (the list of projects is known), `BEFORE_PROJECT` / `AFTER_PROJECT`
-(per project, numbered, after: its result).
-`INIT`: `BEFORE_WRITE` / `AFTER_WRITE` (the config, and where it came from: storage, template, built-in).
-`ADD`: `BEFORE_WRITE` / `AFTER_WRITE` (the lines to add). `MIGRATE`: `BEFORE_RENAME` / `AFTER_RENAME`.
-`UPDATE`: `BEFORE_DOWNLOAD` / `AFTER_DOWNLOAD`, `BEFORE_REPLACE` / `AFTER_REPLACE`.
-`FIND`, `URL`, `MOVE`: only `START`, `END`, `ERROR`.
+Added after the questions:
 
-### What is injected
+- **Defaults in a dedicated directory.** Some stages are scripts themselves ("replaceable"
+  events): gits runs a default script unless the variable of the event points to another one.
+  The first one is the search of projects (`find` which never enters `node_modules`):
+  `GITS_STATE_FIND`, `GITS_FIND_FIND`, `GITS_MIGRATE_FIND`, default
+  [events/defaults/FIND.sh](events/defaults/FIND.sh). The default is compiled into the binary;
+  its file documents at the top what it is, how it is called and what it has access to.
+- **An example script of every variable**, each with its whole context documented at the top:
+  [events/examples/](events/examples/), 133 files, generated by `gits events --examples <directory>`.
+  A test checks that the directory is up to date.
 
-Env vars, always:
+## The rename of the variables
 
-| Variable | Value |
+| Old | New |
 |---|---|
-| `GITSTORAGESOURCE`, `GITSTORAGETEMPLATE`, `GITSTORAGETESHELL`, `GITSTORAGETENCRYPTIONSOCKET` | as gits uses them (defaults applied) |
-| `GITSTORAGETARGETDIR` | from the config, once it is loaded |
-| `GITS_EVENT` | full name of the env var of this event, e.g. `GITSTORAGE_PUSH_BEFORE_ENCRYPT` |
-| `GITS_EVENT_COMMAND` | `push` |
-| `GITS_EVENT_NAME` | `BEFORE_ENCRYPT` |
-| `GITS_EVENT_SEQ` | number of this event among all events of this run, from 1 (also counting the ones without a script) |
-| `GITS_EVENT_INDEX` | which occurrence of this particular event it is in this run, from 1 (`BEFORE_ENCRYPT` of the 3rd file: `3`) |
-| `GITS_EVENT_PWD` | directory where gits was called |
-| `GITS_EVENT_ARGS` | the arguments gits was called with |
-| `GITS_EVENT_BIN`, `GITS_EVENT_VERSION` | path of the gits binary, its version |
-| `GITS_EVENT_PID` | pid of gits |
+| `GITSTORAGESOURCE` | `GITS_SOURCE` |
+| `GITSTORAGETESHELL` | `GITS_SHELL` |
+| `GITSTORAGETENCRYPTIONSOCKET` | `GITS_ENCRYPTION_SOCKET` |
+| `GITSTORAGETEMPLATE` | `GITS_TEMPLATE` |
+| `GITSTORAGETARGETDIR` (config) | `GITS_TARGETDIR` |
+| `GITSTORAGELIST` (config) | `GITS_LIST` |
 
-Once known:
+Not asked for, added to not break what exists: the old names are still read when the new one is
+not defined (environment and config), `gits --help` shows which name a value came from,
+`gits migrate` renames the two variables inside of a config, and `gits add` keeps using the
+name the config uses. `PLAN.md`, `REVERSE_PLAN.md` and the older chapters of `CHANGES.md` describe
+the original tool and its history: they keep the old names.
 
-| Variable | Value |
+## What was built
+
+| | |
 |---|---|
-| `GITS_EVENT_PROJECT_DIR` | root of the project |
-| `GITS_EVENT_CONFIG` | path of `.git/gits.sh` |
-| `GITS_EVENT_REMOTE` | url of remote `origin` of the project |
-| `GITS_EVENT_LIST_COUNT` | number of elements of `GITSTORAGELIST` |
-| `GITS_EVENT_LIST_FILE` | path of a file with the whole list, one element per line: `encrypted<TAB>SOURCE<TAB>TARGET` |
-| `GITS_EVENT_TEMP_DIR` | the temporary directory (clone of the storage) |
-| `GITS_EVENT_STORAGE_DIR` | directory of the project inside the clone (`<temp>/<GITSTORAGETARGETDIR>`) |
-| `GITS_EVENT_STORAGE_BRANCH` | branch of the storage |
-| `GITS_EVENT_YES` | `1` when `--yes` was given |
+| `src/events.rs` | the list of events per command (one table, the source of everything below), running the scripts, `gits events` |
+| `GITS_<COMMAND>_<EVENT>` | 120 events over 12 commands (`STATE FIND INIT ADD DIFF ISINSYNC PUSH PULL URL MOVE MIGRATE UPDATE`), 3 of them replaceable |
+| `GITS_<COMMAND>_ALL`, `GITS_ALL` | catch-all |
+| injected | `$1` event, `$2` command, arguments of the event; `GITS_EVENT*` (which event, numbering, trigger, directories, the list, per-file paths, results) and the native variables. Full tables: [LIFECYCLE.md, Reference](LIFECYCLE.md#reference) |
+| `events/defaults/FIND.sh` | default of the replaceable event |
+| `events/examples/` | example scripts |
+| `gits events`, `gits events --examples <dir>`, `gits events --markdown` | the list; the examples; the reference tables of LIFECYCLE.md |
+| `tests/test012` | every variable registered with one dump script; the exact order of events of every command; what a script sees. Dumps stay in `tests/test012/tmp/dumps/<nn>-<command>/<SEQ>-<EVENT>-<INDEX>.<TRIGGER>.txt` |
+| `tests/test013` | stopping, warnings, missing script, `~/` and relative paths, `GITS_SHELL`, silence of `isinsync`, scripts from the config, the replaceable `FIND`, no recursion, the old names, `gits events`, examples up to date |
 
-Per file (`*_DECRYPT`, `*_COPY`, `*_ENCRYPT`):
+## Known limits
 
-| Variable | Value |
-|---|---|
-| `GITS_EVENT_FILE_SOURCE` | local file, absolute |
-| `GITS_EVENT_FILE_SOURCE_RAW` | SOURCE as written in the config |
-| `GITS_EVENT_FILE_TARGET` | TARGET, path in the storage |
-| `GITS_EVENT_FILE_STORED` | the file in the clone, absolute |
-| `GITS_EVENT_FILE_ENCRYPTED` | `1` for `:e:` |
-| `GITS_EVENT_FILE_PLAIN` | the temporary plain copy (`TARGET.hash…`), while it exists |
-| `GITS_EVENT_FILE_INDEX`, `GITS_EVENT_FILE_COUNT` | position in the list |
-
-Results (in the `AFTER_*`, `END`, `ERROR` events where they exist):
-
-| Variable | Value |
-|---|---|
-| `GITS_EVENT_EXIT_CODE` | exit code gits is about to end with (`END`) |
-| `GITS_EVENT_ERROR` | the error message (`ERROR`) |
-| `GITS_EVENT_RESULT` | `insync`, `differs` or `missing` (`AFTER_COMPARE`, `AFTER_PROJECT`, `END`) |
-| `GITS_EVENT_CHANGED_FILE` | path of a file with the local files which differ, one per line |
-| `GITS_EVENT_COMMIT` | hash of the new commit (`AFTER_COMMIT`, `AFTER_PUSH`) |
-| `GITS_EVENT_STATE_INDEX`, `GITS_EVENT_STATE_COUNT`, `GITS_EVENT_COUNT_SUCCESS`, `GITS_EVENT_COUNT_ERROR` | `state` |
-
-Arguments: `$1` the name of the event (`BEFORE_ENCRYPT`), `$2` the command (`push`); for the
-per-file events `$3` SOURCE (absolute), `$4` the file in the clone.
-
-### Tests
-
-- `tests/test012`: one dump script, registered for every event of every command; each call
-  writes one file `tests/test012/tmp/dumps/<SEQ>-<COMMAND>-<EVENT>-<INDEX>.txt` with its
-  arguments, its working directory and all `GITS*` env vars. The checks: which events fired, in
-  which order, with which values.
-- a test for scripts which fail (see the open question about that), for `isinsync` staying
-  silent, for `GITSTORAGETESHELL`.
-
-## Open questions
-
-Ideas which were not asked for, and decisions which change the design. Each has a
-recommendation; say which ones you want.
-
-1. **Can a script stop the command?** Recommended: yes for `BEFORE_*` and `START`: a non-zero
-   exit code aborts the command (the temporary directory is still removed, `ERROR` and `END`
-   still fire). A failing `AFTER_*` / `END` / `ERROR` script only prints a warning. This makes
-   "check something before push, refuse the push" possible.
-
-2. **A catch-all variable.** `GITSTORAGE_ALL` (every event of every command) and
-   `GITSTORAGE_<COMMAND>_ALL` (every event of one command), run in addition to the specific
-   one. Recommended: yes. It makes logging one line of config, and the dump test simple.
-
-3. **Per-project scripts.** `.git/gits.sh` is a shell script already: gits could also read the
-   `GITSTORAGE_<COMMAND>_<EVENT>` variables which the config sets, so a project can have its
-   own scripts (stored with the config). The env var of the terminal and the one of the config
-   would both run, env first. Recommended: yes, but it is extra work; can come second.
-   Note: events before `CONFIG_LOADED` can only come from the env.
-
-4. **The prefix of the injected variables.** Proposed above: `GITS_EVENT_*`, to keep them apart
-   from the `GITSTORAGE_*` names which define scripts. Alternative: `GITSTORAGE_EVENT_*`.
-
-5. **The value: a command line or a path?** Proposed above: a command line given to
-   `$GITSTORAGETESHELL -c`. Alternative: only a path to a script file. A command line covers both.
-
-6. **Nested gits.** A script may call gits itself (e.g. `gits isinsync` of another project).
-   Recommended: the inner gits fires its own events, `GITS_EVENT_DEPTH` says how deep, and
-   beyond depth 5 gits refuses to run scripts (protection from a script which calls itself).
-
-7. **`gits events`.** A command which prints every event name per command and marks the ones
-   defined right now (like the env table of `--help`). Recommended: yes, small.
-
-8. **Events for every command, also `find`, `url`, `move`, `init`, `add`, `migrate`,
-   `--update`?** You wrote "for each command". Proposed above: yes, most of them with only
-   `START` / `END` / `ERROR`.
-
-9. **Per-file events in `state`.** `gits state` over 100 projects with 10 files each fires
-   thousands of per-file events. No cost when nothing is defined, but a defined
-   `GITSTORAGE_STATE_BEFORE_COPY` is started for every file. Recommended: keep them, as asked.
+- Scripts of a config run from `CONFIG_LOADED` on; `START` (and `FIND`, `FOUND` of `state`)
+  can only be defined in the environment.
+- `gits --update`: its events are implemented, but only `START`, `ERROR` and `END` are covered
+  by a test (a local build refuses to update, and the update test does not register scripts).
+- `init` decrypts a stored encrypted config without `BEFORE_DECRYPT` / `AFTER_DECRYPT`.
+- Replaceable events exist only for the search of projects so far.

@@ -22,6 +22,8 @@ jobs:
   test:
     name: Test on Linux x64
     runs-on: ubuntu-latest
+    # a test which hangs must not burn minutes: the whole job is stopped
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -47,10 +49,20 @@ jobs:
         with:
           node-version: 24
 
-      # zsh: GITSTORAGETESHELL is tested with bash and with zsh
+      # zsh: GITS_SHELL is tested with bash and with zsh
       # nc:  tests/encoder/encoder-start.sh asks the socket with it whether the encoder process answers
+      # (python3, which tests/test014 needs for tests/terminal.py, is already on the runner)
       - name: Install zsh and nc
         run: sudo apt-get update && sudo apt-get install -y zsh netcat-openbsd
+
+      # compiled crates of the previous run (gits and ssenc of the submodule): without it most of
+      # the time of this job is compiling
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            submodules/encrypt/rust
 
       - name: Compile binary
         run: /bin/bash compile.sh
@@ -66,13 +78,16 @@ jobs:
           command -v ssh-keygen ssh-agent ssh-add
           ssh -V
 
+      # the step which can hang (a process waiting for something which never comes)
       - name: Run unit and E2E tests
+        timeout-minutes: 5
         run: /bin/bash test.sh
 
   build-matrix:
     name: Build ${{ matrix.target }}
     needs: test
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       matrix:
         # artifact_name: the same names src/update.rs looks for (fn asset)
@@ -98,9 +113,18 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # compiled crates of the previous run: the build is the slow part of this job
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # a prebuilt binary: "cargo install cross" compiles it for minutes
       - name: Install cross (if required)
         if: matrix.use_cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
 
       # Version is embedded only when a tag is built. Everything else is "dev",
       # and a "dev" binary refuses to --update.
@@ -129,6 +153,7 @@ jobs:
     needs: build-matrix
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     permissions:
       contents: write
     steps:

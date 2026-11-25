@@ -1,7 +1,7 @@
 #
 # Makes sure the encoder process is running: the process gits asks to encrypt and decrypt
 # the elements marked "SOURCE:e:TARGET" (gits never encrypts by itself, it sends
-# encode / decode requests to the unix socket GITSTORAGETENCRYPTIONSOCKET).
+# encode / decode requests to the unix socket GITS_ENCRYPTION_SOCKET).
 #
 # The process is submodules/encrypt/examples/socket/server.ts started with --seal, see
 # "socket-002-encoder_process_on_a_socket" in submodules/encrypt/examples/SUMMARY.md.
@@ -12,14 +12,14 @@
 #
 # Usage (from any directory):
 #
-#   export GITSTORAGETENCRYPTIONSOCKET="${HOME}/.gits/ssenc.sock"
+#   export GITS_ENCRYPTION_SOCKET="${HOME}/.gits/ssenc.sock"
 #   export GITS_ENCODER_SSH_KEY="${HOME}/.ssh/id_ed25519.pub"
 #   /bin/bash tests/encoder/encoder-start.sh
 #   gits diff
 #   /bin/bash tests/encoder/encoder-stop.sh
 #
 # Env vars:
-#   GITSTORAGETENCRYPTIONSOCKET   required   where the process listens, the same variable gits reads
+#   GITS_ENCRYPTION_SOCKET   required   where the process listens, the same variable gits reads
 #   GITS_ENCODER_SSH_KEY          required   the key everything is encrypted with: path of a .pub file or
 #                                            a fingerprint (SHA256:...). Its private key has to be loaded
 #                                            in the ssh-agent SSH_AUTH_SOCK points to (ssh-add -l)
@@ -50,7 +50,7 @@ esac
 
 _ROOT="$(cd "${_DIR}/../.." && pwd)"
 
-SOCK="${GITSTORAGETENCRYPTIONSOCKET}"
+SOCK="${GITS_ENCRYPTION_SOCKET}"
 KEY="${GITS_ENCODER_SSH_KEY}"
 ENCRYPT="${GITS_ENCODER_DIR:-${_ROOT}/submodules/encrypt}"
 
@@ -60,13 +60,13 @@ KEY="${KEY/#\~\//${HOME}/}"
 ENCRYPT="${ENCRYPT/#\~\//${HOME}/}"
 
 if [[ -z "${SOCK}" ]]; then
-  echo "${0} error: env var GITSTORAGETENCRYPTIONSOCKET is not defined, it is the path of the socket the encoder process should listen on"
+  echo "${0} error: env var GITS_ENCRYPTION_SOCKET is not defined, it is the path of the socket the encoder process should listen on"
   exit 1
 fi
 
 # The path of a unix socket is limited (104 bytes on macOS, 108 on Linux).
 if [[ "${#SOCK}" -gt 100 ]]; then
-  echo "${0} error: the socket path is too long (${#SOCK} characters, at most 100), GITSTORAGETENCRYPTIONSOCKET=>${SOCK}<"
+  echo "${0} error: the socket path is too long (${#SOCK} characters, at most 100), GITS_ENCRYPTION_SOCKET=>${SOCK}<"
   exit 1
 fi
 
@@ -75,8 +75,19 @@ LOGFILE="${SOCK}.log"
 
 # Any line sent to the process gets one line back ("ping" is not a request: the reply is an error,
 # but it is a reply). Nothing comes back when nobody listens.
+#
+# nc of Linux (netcat-openbsd) keeps the connection open after its input ended, and the encoder
+# process closes a connection only after the client did: without -N ("say: nothing more from me,
+# when the input ends") nc would wait forever. nc of macOS does that by itself (its -N means something else), so -N is used only
+# when the help of nc describes it as "shutdown ... after EOF".
+# -w 2 on top of it: never wait longer than 2 seconds of silence, whatever happens.
+NC_EOF=""
+if nc -h 2>&1 | grep -q -i "shutdown.*after EOF"; then
+  NC_EOF="-N"
+fi
+
 if [[ -S "${SOCK}" ]]; then
-  REPLY_LINE="$(echo "ping" | nc -w 2 -U "${SOCK}" 2> /dev/null)"
+  REPLY_LINE="$(echo "ping" | nc ${NC_EOF} -w 2 -U "${SOCK}" 2> /dev/null)"
   if [[ -n "${REPLY_LINE}" ]]; then
     cat <<EEE
 encoder process already running, nothing started
@@ -146,7 +157,7 @@ done
 rm -f "${PIDFILE}"
 
 cat <<EEE
-${0} error: the encoder process could not be started on GITSTORAGETENCRYPTIONSOCKET=>${SOCK}< with GITS_ENCODER_SSH_KEY=>${KEY}<
+${0} error: the encoder process could not be started on GITS_ENCRYPTION_SOCKET=>${SOCK}< with GITS_ENCODER_SSH_KEY=>${KEY}<
 (is the private key loaded in ssh-agent? check with: ssh-add -l). Last lines of >${LOGFILE}<:
 $(tail -n 5 "${LOGFILE}" 2> /dev/null)
 EEE

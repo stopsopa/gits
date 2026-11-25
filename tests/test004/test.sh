@@ -53,7 +53,7 @@ if [[ -d "${_DIR}/tmp" ]]; then
 fi
 
 # Shared setup: creates ${WORK} (= tmp/ next to this file) with an empty HOME, own git config and
-# an empty storage repository in ${WORK}/GITSTORAGESOURCE, goes to ${WORK}, and defines function "test"
+# an empty storage repository in ${WORK}/GITS_SOURCE, goes to ${WORK}, and defines function "test"
 # (bash/test.sh) and the helpers used below (gits, has, listing, stored, storage_commits, project, ...)
 source "${_DIR}/../_lib.sh"
 
@@ -92,10 +92,10 @@ function make {
   project "${1}" "git@github.com:tmp/${2}.git"
   echo "content of ${2}" > "${1}/file.txt"
   cat <<EEE > "${1}/.git/${NAME}"
-GITSTORAGETARGETDIR="git@github.com:tmp__${2}.git"
-GITSTORAGELIST=(
-    "${NAME}::\$GITSTORAGETARGETDIR/${NAME}"
-    "../file.txt::\$GITSTORAGETARGETDIR/file.txt"
+GITS_TARGETDIR="git@github.com:tmp__${2}.git"
+GITS_LIST=(
+    "${NAME}::\$GITS_TARGETDIR/${NAME}"
+    "../file.txt::\$GITS_TARGETDIR/file.txt"
 )
 EEE
 }
@@ -331,7 +331,7 @@ test "state, all in sync: migrated project under its new name, counts"
 # ---------- a broken config doesn't hide the other projects ----------
 
 # The config of project "c" is replaced by a script which ends the shell: gits can't read
-# GITSTORAGETARGETDIR and GITSTORAGELIST from it.
+# GITS_TARGETDIR and GITS_LIST from it.
 echo 'exit 0' > c/.git/gits.sh
 
 # state reports the broken config ("didn't run to its end"), counts it as 1 error and still checks

@@ -81,6 +81,40 @@ pub fn env(name: &str) -> Option<String> {
     }
 }
 
+/**
+ * Until the rename every variable of gits started with GITSTORAGE (GITSTORAGESOURCE, ...).
+ * The old names are still read when the new one is not defined: nobody has to change
+ * ~/.zshrc and every .git/gits.sh on the same day.
+ */
+pub const OLD_NAMES: [(&str, &str); 6] = [
+    ("GITS_SOURCE", "GITSTORAGESOURCE"),
+    ("GITS_SHELL", "GITSTORAGETESHELL"),
+    ("GITS_ENCRYPTION_SOCKET", "GITSTORAGETENCRYPTIONSOCKET"),
+    ("GITS_TEMPLATE", "GITSTORAGETEMPLATE"),
+    ("GITS_TARGETDIR", "GITSTORAGETARGETDIR"),
+    ("GITS_LIST", "GITSTORAGELIST"),
+];
+
+pub fn old_name(name: &str) -> Option<&'static str> {
+    OLD_NAMES
+        .iter()
+        .find(|(new, _)| *new == name)
+        .map(|(_, old)| *old)
+}
+
+// env var by its new name, else by its old one. The second value: the name it was found under
+pub fn env_named(name: &str) -> Option<(String, String)> {
+    if let Some(value) = env(name) {
+        return Some((value, name.to_string()));
+    }
+    let old = old_name(name)?;
+    env(old).map(|value| (value, old.to_string()))
+}
+
+pub fn env_any(name: &str) -> Option<String> {
+    env_named(name).map(|(value, _)| value)
+}
+
 pub fn random_hex(bytes: usize) -> String {
     let mut buf = vec![0u8; bytes];
     let ok = fs::File::open("/dev/urandom")

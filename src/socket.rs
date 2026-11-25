@@ -16,7 +16,7 @@ use std::time::Duration;
  * A path is written like a JSON string. Paths are always sent absolute: a relative one would be
  * resolved against the directory the server was started in.
  */
-pub const ENV_SOCKET: &str = "GITSTORAGETENCRYPTIONSOCKET";
+pub const ENV_SOCKET: &str = "GITS_ENCRYPTION_SOCKET";
 
 #[derive(Debug)]
 pub struct EncError {

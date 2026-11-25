@@ -192,3 +192,55 @@ This way, when `gits diff` is executed in the terminal of vscode, ctrl + click o
 - for an encrypted element (`SOURCE:e:TARGET`) it is the plain local file too
 - nothing is printed when the files are in sync
 - a source file which doesn't exist is not in the list, it is reported as an error above
+
+# all variables start with GITS_
+
+Every variable of the project is prefixed `GITS_` now, nothing starts with `GITSTORAGE` any more:
+
+| old | new |
+|---|---|
+| `GITSTORAGESOURCE` | `GITS_SOURCE` |
+| `GITSTORAGETESHELL` | `GITS_SHELL` |
+| `GITSTORAGETENCRYPTIONSOCKET` | `GITS_ENCRYPTION_SOCKET` |
+| `GITSTORAGETEMPLATE` | `GITS_TEMPLATE` |
+| `GITSTORAGETARGETDIR` | `GITS_TARGETDIR` |
+| `GITSTORAGELIST` | `GITS_LIST` |
+
+The chapters above were written before the rename and still use the old names.
+The old names keep working when the new one is not defined (environment and config),
+`gits migrate` renames the two variables inside of a config.
+
+# lifecycle events
+
+Scripts between the stages of every command: `GITS_<COMMAND>_<EVENT>`, `GITS_<COMMAND>_ALL`, `GITS_ALL`,
+defined in the environment or in `.git/gits.sh`, executed by the shell from `GITS_SHELL`.
+
+- requirements and decisions: IMPLEMENT_EVENTS.md
+- documentation, with a graph of every command: LIFECYCLE.md
+- list of all events: `gits events`, example scripts: events/examples/, defaults: events/defaults/
+
+# gits add: a list to tick
+
+`gits add <file|directory> ...` in a terminal doesn't write straight away any more. It shows
+the files it found (the ones which are not in the config yet, with paths relative to the
+project) and waits:
+
+```
+    add enc  file
+    [x] [ ]  .env
+  > [x] [x]  config/secret.json
+    [ ]      config/public.json
+```
+
+- column `add`: the file goes to `GITS_LIST`; column `enc`: as `SOURCE:e:TARGET`. The box `enc`
+  exists only in a ticked row, the paths stay in one column anyway
+- arrows move (left / right between the two boxes), `space` ticks
+- `a` `n` `i`: all / none / invert in the column `add`; `A` `N` `I`: the same in the column `enc`,
+  among the ticked rows
+- only `ctrl+enter` writes the config. Enter alone does nothing. gits asks the terminal to tell the
+  two apart (kitty keyboard protocol, modifyOtherKeys of xterm); for a terminal which can't:
+  `ctrl+j`, `ctrl+s`
+- `q`, `esc`: nothing is written, exit code 1. `ctrl+c`: exit code 130
+- at the beginning everything is ticked; with `-e` also as encrypted
+- `--yes`, or no terminal (script, pipe): no list, everything found is added, as before
+- code: `src/menu.rs`, tests: `tests/test014` (keys pressed in a pseudo terminal by `tests/terminal.py`)

@@ -6,7 +6,7 @@
 #   tests/encoder/encoder-stop.sh    stops it
 #   gits.sh                          calls encoder-start.sh, then the binary with the same arguments
 #
-# (the encoder process is what gits asks, through the unix socket GITSTORAGETENCRYPTIONSOCKET,
+# (the encoder process is what gits asks, through the unix socket GITS_ENCRYPTION_SOCKET,
 # to encrypt and decrypt the elements written as "SOURCE:e:TARGET")
 #
 # In this order:
@@ -20,7 +20,7 @@
 #      exit code of the binary is passed.
 #   5. gits.sh with a project which has an encrypted element: without the key nobody listens (error
 #      of the binary); with the key the process is started without a word and isinsync, push work.
-#   6. gits.sh without GITSTORAGETENCRYPTIONSOCKET: the socket is ~/.gits/ssenc.sock.
+#   6. gits.sh without GITS_ENCRYPTION_SOCKET: the socket is ~/.gits/ssenc.sock.
 #   7. gits.sh when the encoder process can't be started: the binary is not called at all.
 #
 # /bin/bash tests/test011/test.sh
@@ -60,7 +60,7 @@ if [[ -d "${_DIR}/tmp" ]]; then
 fi
 
 # the common setup of all tests: ${WORK} (tmp/ next to this file, from now on also the current
-# directory), own HOME and git config, an empty storage in ${WORK}/GITSTORAGESOURCE, function "test"
+# directory), own HOME and git config, an empty storage in ${WORK}/GITS_SOURCE, function "test"
 # and the helpers used here (has, listing, stored, ssenc, project, demo_key, fail), ${BIN} (the gits
 # binary), ${AGENT_SOCK} (socket of the private ssh-agent) and ${REAL_HOME}
 source "${_DIR}/../_lib.sh"
@@ -91,17 +91,17 @@ function run {
 
 # ---------- what is required ----------
 
-# nothing is exported yet. Without GITSTORAGETENCRYPTIONSOCKET the script doesn't know where the
+# nothing is exported yet. Without GITS_ENCRYPTION_SOCKET the script doesn't know where the
 # process should listen: it says so and ends with 1.
-COMMAND='run /bin/bash "${ENCODER_START}" 2>&1 | has "env var GITSTORAGETENCRYPTIONSOCKET is not defined"'
-EXPECTED_STDOUT="env var GITSTORAGETENCRYPTIONSOCKET is not defined"
+COMMAND='run /bin/bash "${ENCODER_START}" 2>&1 | has "env var GITS_ENCRYPTION_SOCKET is not defined"'
+EXPECTED_STDOUT="env var GITS_ENCRYPTION_SOCKET is not defined"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "start without the socket"
 
 # the socket is known, nothing answers on it, so a process has to be started: for that the key
 # is required. GITS_ENCODER_SSH_KEY is not defined: error, exit code 1.
-COMMAND='GITSTORAGETENCRYPTIONSOCKET="${SOCK}" run /bin/bash "${ENCODER_START}" 2>&1 | has "env var GITS_ENCODER_SSH_KEY is not defined"'
+COMMAND='GITS_ENCRYPTION_SOCKET="${SOCK}" run /bin/bash "${ENCODER_START}" 2>&1 | has "env var GITS_ENCODER_SSH_KEY is not defined"'
 EXPECTED_STDOUT="env var GITS_ENCODER_SSH_KEY is not defined"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
@@ -109,7 +109,7 @@ test "start without the key"
 
 # GITS_ENCODER_DIR is where the checkout of stopsopa/encrypt is. In an empty place there is no
 # examples/socket/server.ts to start: error which names the file, exit code 1.
-COMMAND='GITSTORAGETENCRYPTIONSOCKET="${SOCK}" GITS_ENCODER_SSH_KEY="${KEY}" GITS_ENCODER_DIR="${WORK}/nothing" run /bin/bash "${ENCODER_START}" 2>&1 | has "examples/socket/server.ts< not found"'
+COMMAND='GITS_ENCRYPTION_SOCKET="${SOCK}" GITS_ENCODER_SSH_KEY="${KEY}" GITS_ENCODER_DIR="${WORK}/nothing" run /bin/bash "${ENCODER_START}" 2>&1 | has "examples/socket/server.ts< not found"'
 EXPECTED_STDOUT="examples/socket/server.ts< not found"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
@@ -126,7 +126,7 @@ ssh-keygen -q -t ed25519 -N "" -C "gits-test-not-loaded" -f "${WORK}/keys/not-lo
 #     in its output, which was written to start.log)
 #   - leave no pid file: "ssenc.sock.pid" is looked for in the listing of ${WORK} and is NOT in the
 #     expected output
-COMMAND='GITSTORAGETENCRYPTIONSOCKET="${SOCK}" GITS_ENCODER_SSH_KEY="${WORK}/keys/not-loaded.pub" run /bin/bash "${ENCODER_START}" > "${WORK}/start.log" 2>&1; CODE="${?}"; cat "${WORK}/start.log" | has "the encoder process could not be started" "is the private key loaded in ssh-agent?"; ls "${WORK}" | has "ssenc.sock.pid"; (exit "${CODE}")'
+COMMAND='GITS_ENCRYPTION_SOCKET="${SOCK}" GITS_ENCODER_SSH_KEY="${WORK}/keys/not-loaded.pub" run /bin/bash "${ENCODER_START}" > "${WORK}/start.log" 2>&1; CODE="${?}"; cat "${WORK}/start.log" | has "the encoder process could not be started" "is the private key loaded in ssh-agent?"; ls "${WORK}" | has "ssenc.sock.pid"; (exit "${CODE}")'
 EXPECTED_STDOUT="the encoder process could not be started
 is the private key loaded in ssh-agent?"
 EXPECTED_STDERR=""
@@ -135,7 +135,7 @@ test "start with a key which is not in the agent: error, no pid file left"
 
 # nothing runs and there is no pid file: stop says that there is nothing to stop. That is not
 # an error (exit code 0): the script can be called any time. The whole output is compared.
-COMMAND='GITSTORAGETENCRYPTIONSOCKET="${SOCK}" /bin/bash "${ENCODER_STOP}"'
+COMMAND='GITS_ENCRYPTION_SOCKET="${SOCK}" /bin/bash "${ENCODER_STOP}"'
 EXPECTED_STDOUT="encoder process not running (no ${SOCK}.pid), nothing to stop"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
@@ -144,7 +144,7 @@ test "stop when nothing runs"
 # ---------- start, start again, stop, stop again ----------
 
 # from here both variables are exported: the scripts get them without naming them in every command
-export GITSTORAGETENCRYPTIONSOCKET="${SOCK}"
+export GITS_ENCRYPTION_SOCKET="${SOCK}"
 export GITS_ENCODER_SSH_KEY="${KEY}"
 
 # the real start. The script prints what it started: the three fragments are the first line and
@@ -196,7 +196,7 @@ echo "secret" > "${WORK}/plain.txt"
 # the way gits sends it: "encode <plain file> <encrypted file>", the reply starts with "ok encode".
 # Then the ssenc binary decrypts the result with the same key (through the private agent, see
 # function ssenc in tests/_lib.sh) and prints the content of the plain file: "secret".
-COMMAND='echo "encode \"${WORK}/plain.txt\" \"${WORK}/plain.txt.enc\"" | nc -U "${SOCK}" | has "ok encode"; ssenc decrypt --ssh-key "${KEY}" -i "${WORK}/plain.txt.enc"'
+COMMAND='socket_request "${SOCK}" "encode \"${WORK}/plain.txt\" \"${WORK}/plain.txt.enc\"" | has "ok encode"; ssenc decrypt --ssh-key "${KEY}" -i "${WORK}/plain.txt.enc"'
 EXPECTED_STDOUT="ok encode
 secret"
 EXPECTED_STDERR=""
@@ -245,7 +245,7 @@ kill "${OTHER}" 2> /dev/null
 # ---------- the wrapper ----------
 
 # the wrapper is tested from a clean state: nothing about the encoder is defined
-unset GITSTORAGETENCRYPTIONSOCKET
+unset GITS_ENCRYPTION_SOCKET
 unset GITS_ENCODER_SSH_KEY
 
 # the wrapper searches for nothing: without GITS_BIN it doesn't know which binary to start.
@@ -291,14 +291,14 @@ project repo "git@github.com:tmp/repo.git"
 cd repo
 printf 'A=1\nB=2\n' > .env
 cat <<EEE > .git/gits.sh
-GITSTORAGETARGETDIR="${D}"
-GITSTORAGELIST=(
-    "../.env:e:\$GITSTORAGETARGETDIR/.env"
+GITS_TARGETDIR="${D}"
+GITS_LIST=(
+    "../.env:e:\$GITS_TARGETDIR/.env"
 )
 EEE
 
 # gits is told where the encoder process should be, but nothing runs there (it was stopped above)
-export GITSTORAGETENCRYPTIONSOCKET="${SOCK}"
+export GITS_ENCRYPTION_SOCKET="${SOCK}"
 
 # still without GITS_ENCODER_SSH_KEY: the wrapper starts nothing, so the binary finds nobody
 # on the socket when it wants to encrypt .env. The error is the one of the binary, exit code 1.
@@ -352,7 +352,7 @@ test "stored encrypted, the ssenc binary opens it, in sync"
 
 # the process is stopped and the variable removed: the next call has to choose the socket by itself
 /bin/bash "${ENCODER_STOP}" > /dev/null
-unset GITSTORAGETENCRYPTIONSOCKET
+unset GITS_ENCRYPTION_SOCKET
 
 # the directory of the real node binary. In the next check HOME has to be the one of the test
 # (the default socket is in ~/.gits, and the real home must not be touched), but a node found
@@ -365,7 +365,7 @@ function run_home {
   SSH_AUTH_SOCK="${AGENT_SOCK}" PATH="${NODE_DIR}:${PATH}" "${@}"
 }
 
-# without GITSTORAGETENCRYPTIONSOCKET the wrapper uses ~/.gits/ssenc.sock. isinsync works (exit
+# without GITS_ENCRYPTION_SOCKET the wrapper uses ~/.gits/ssenc.sock. isinsync works (exit
 # code 0, in sync: decrypting needs the process, so it runs), and the pid file is in
 # ${HOME}/.gits, where HOME is ${WORK}/home.
 COMMAND='run_home /bin/bash "${WRAPPER}" isinsync; echo "isinsync: ${?}"; ls "${HOME}/.gits" | has "ssenc.sock.pid"'
@@ -376,11 +376,11 @@ EXPECTED_CODE="0"
 test "wrapper: default socket is ~/.gits/ssenc.sock"
 
 # that process is stopped too, the test leaves nothing running
-GITSTORAGETENCRYPTIONSOCKET="${HOME}/.gits/ssenc.sock" /bin/bash "${ENCODER_STOP}" > /dev/null
+GITS_ENCRYPTION_SOCKET="${HOME}/.gits/ssenc.sock" /bin/bash "${ENCODER_STOP}" > /dev/null
 
 # the key which is not in the agent, on the socket of the test: starting the process will fail
 export GITS_ENCODER_SSH_KEY="${WORK}/keys/not-loaded.pub"
-export GITSTORAGETENCRYPTIONSOCKET="${SOCK}"
+export GITS_ENCRYPTION_SOCKET="${SOCK}"
 
 # the wrapper can't start the encoder process: it prints why and ends with 1, and it does not
 # start the binary. "gits dev" (what --version would print) is looked for and is NOT in the

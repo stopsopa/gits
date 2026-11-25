@@ -28,7 +28,7 @@
 #            at its beginning. Ignored by git: tests/testNNN/.gitignore
 #   HOME   - ${WORK}/home (empty: "~/..." sources and the git config of the developer can't influence the test)
 #   pwd    - ${WORK}
-#   GITSTORAGESOURCE - ${WORK}/GITSTORAGESOURCE, an empty repository: the storage.
+#   GITS_SOURCE - ${WORK}/GITS_SOURCE, an empty repository: the storage.
 #                      An ordinary one with a working tree (not bare), to see what the test stored
 #                      by just looking into that directory when the test ended.
 #                      A repository with a working tree refuses a push to its checked out branch,
@@ -51,6 +51,7 @@
 # Encryption (only the tests which need it, see the comment above encoder_start):
 #   encoder_start [name of the key]     the real encoder process of submodules/encrypt on a unix socket
 #   encoder_stop, demo_key <name>
+#   socket_request <socket> <line>      one request sent by hand to the encoder process (nc)
 #   ssenc <args>                        the ssenc binary of submodules/encrypt (inside of COMMAND)
 #
 # WARNING: bash/test.sh defines function "test", so the builtin "test" is not available in the tests
@@ -73,14 +74,28 @@ if [[ ! -f "${_ROOT}/bash/test.sh" ]]; then
   exit 1
 fi
 
+# the names from before the rename are still read by gits when the new ones are not defined:
+# the ones of the developer must not leak into a test
 unset GITSTORAGESOURCE
 unset GITSTORAGETEMPLATE
 unset GITSTORAGETESHELL
 unset GITSTORAGETENCRYPTIONSOCKET
+unset GITS_SOURCE
+unset GITS_TEMPLATE
+unset GITS_SHELL
+unset GITS_ENCRYPTION_SOCKET
 unset GITS_RELEASES
 unset GITS_CONFIRM
 unset GITS_TEST_ANSWER
 unset NO_COLOR
+
+# lifecycle scripts of the developer (GITS_ALL, GITS_<COMMAND>_<EVENT>) must not run in a test.
+# The names of the commands are enough: every such variable starts with GITS_<COMMAND>_
+unset GITS_ALL
+for _LIB_NAME in $(env | grep -E '^GITS_(STATE|FIND|INIT|ADD|DIFF|ISINSYNC|PUSH|PULL|URL|MOVE|MIGRATE|UPDATE)_' | cut -d = -f 1); do
+  unset "${_LIB_NAME}"
+done
+unset GITS_EVENT_RUNNING
 
 mkdir -p "${_DIR}/tmp"
 
@@ -128,9 +143,9 @@ cat <<EEE > "${GIT_CONFIG_GLOBAL}"
   detachedHead = false
 EEE
 
-export GITSTORAGESOURCE="${WORK}/GITSTORAGESOURCE"
-git init -q "${GITSTORAGESOURCE}"
-git -C "${GITSTORAGESOURCE}" config receive.denyCurrentBranch updateInstead
+export GITS_SOURCE="${WORK}/GITS_SOURCE"
+git init -q "${GITS_SOURCE}"
+git -C "${GITS_SOURCE}" config receive.denyCurrentBranch updateInstead
 
 cd "${WORK}"
 
@@ -173,7 +188,7 @@ function project {
 # fresh clone of the storage, to look at what is really stored
 function storage {
   rm -rf "${1}"
-  git clone -q "${GITSTORAGESOURCE}" "${1}" 2> /dev/null || fail "can't clone the storage to >${1}<"
+  git clone -q "${GITS_SOURCE}" "${1}" 2> /dev/null || fail "can't clone the storage to >${1}<"
 }
 
 # stored <file, path from the root of the storage>
@@ -185,7 +200,7 @@ function stored {
 
 # number of commits in the storage (0 when it is empty)
 function storage_commits {
-  git -C "${GITSTORAGESOURCE}" rev-list --count --all 2> /dev/null || echo 0
+  git -C "${GITS_SOURCE}" rev-list --count --all 2> /dev/null || echo 0
 }
 
 # ---------- encryption: the real thing from submodules/encrypt ----------
@@ -202,7 +217,7 @@ function storage_commits {
 #   ${WORK}/ssenc.sock.log            its output, one line per request
 #   ${WORK}/ssenc.sock.pid            its pid
 #
-# and GITSTORAGETENCRYPTIONSOCKET=${WORK}/ssenc.sock is exported: gits talks to that socket.
+# and GITS_ENCRYPTION_SOCKET=${WORK}/ssenc.sock is exported: gits talks to that socket.
 #
 # The ssenc binary (submodules/encrypt/rust/bin/ssenc) is not used by gits and not by the encoder
 # process. The tests use it to look at the stored files from outside: a file gits stored has to be
@@ -224,6 +239,20 @@ function ssenc_build {
       fail "can't compile ssenc with >${ENCRYPT}/rust/compile.sh<"
     fi
   fi
+}
+
+# socket_request <socket> <request line>
+# One request sent by hand to the encoder process, its reply on stdout.
+# -N: nc of Linux (netcat-openbsd) would otherwise wait forever after the reply (it keeps the
+# connection open after its input ended, the encoder process closes it only after the client did).
+# nc of macOS needs none (its -N means something else): -N is used only when the help of nc
+# describes it as "shutdown ... after EOF". -w 5: never wait longer than 5 seconds of silence.
+function socket_request {
+  local NC_EOF=""
+  if nc -h 2>&1 | grep -q -i "shutdown.*after EOF"; then
+    NC_EOF="-N"
+  fi
+  echo "${2}" | nc ${NC_EOF} -w 5 -U "${1}"
 }
 
 function ssenc {
@@ -266,7 +295,7 @@ function agent_stop {
 ENCODER_SOCK="${WORK}/ssenc.sock"
 
 function encoder_stop {
-  GITSTORAGETENCRYPTIONSOCKET="${ENCODER_SOCK}" /bin/bash "${_ROOT}/tests/encoder/encoder-stop.sh" >> "${WORK}/encoder-scripts.log" 2>&1
+  GITS_ENCRYPTION_SOCKET="${ENCODER_SOCK}" /bin/bash "${_ROOT}/tests/encoder/encoder-stop.sh" >> "${WORK}/encoder-scripts.log" 2>&1
 }
 
 # demo_key <name>
@@ -282,7 +311,7 @@ function demo_key {
 }
 
 # encoder_start [name of the key]
-# (re)starts the encoder process with the given demo key and exports GITSTORAGETENCRYPTIONSOCKET
+# (re)starts the encoder process with the given demo key and exports GITS_ENCRYPTION_SOCKET
 function encoder_start {
   local NAME="${1:-key-one}"
 
@@ -291,7 +320,7 @@ function encoder_start {
 
   # HOME: node may be installed in the real one (asdf, nvm)
   SSH_AUTH_SOCK="${AGENT_SOCK}" HOME="${REAL_HOME}" \
-    GITSTORAGETENCRYPTIONSOCKET="${ENCODER_SOCK}" GITS_ENCODER_SSH_KEY="${WORK}/keys/${NAME}.pub" \
+    GITS_ENCRYPTION_SOCKET="${ENCODER_SOCK}" GITS_ENCODER_SSH_KEY="${WORK}/keys/${NAME}.pub" \
     /bin/bash "${_ROOT}/tests/encoder/encoder-start.sh" >> "${WORK}/encoder-scripts.log" 2>&1
 
   if [[ "${?}" != "0" ]]; then
@@ -299,5 +328,5 @@ function encoder_start {
     fail "tests/encoder/encoder-start.sh failed"
   fi
 
-  export GITSTORAGETENCRYPTIONSOCKET="${ENCODER_SOCK}"
+  export GITS_ENCRYPTION_SOCKET="${ENCODER_SOCK}"
 }

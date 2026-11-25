@@ -1,16 +1,27 @@
-GITSTORAGESOURCE=git@github.com:stopsopa/gitstorage.git
+GITS_SOURCE=git@github.com:stopsopa/gitstorage.git
     defined in the ~/.bashrc or ~/.zshrc
+    (was: GITSTORAGESOURCE)
 
-GITSTORAGETARGETDIR="git@github.com:stopsopa__gitstorage.git"
-    # normally exist in .git/gitstorage-config.sh
+GITS_TARGETDIR="git@github.com:stopsopa__gitstorage.git"
+    # normally exist in .git/gits.sh, together with GITS_LIST
+    (was: GITSTORAGETARGETDIR, GITSTORAGELIST, in .git/gitstorage-config.sh)
 
-GITSTORAGETEMPLATE="https://"
+GITS_TEMPLATE="https://"
+    (was: GITSTORAGETEMPLATE)
 
-GITSTORAGETESHELL="/bin/bash"
-GITSTORAGETENCRYPTIONSOCKET=""
+GITS_SHELL="/bin/bash"
+    (was: GITSTORAGETESHELL)
 
+GITS_ENCRYPTION_SOCKET=""
+    (was: GITSTORAGETENCRYPTIONSOCKET)
 
+GITS_<COMMAND>_<EVENT>="~/.gits/events/script.sh"
+GITS_<COMMAND>_ALL="~/.gits/events/script.sh"
+GITS_ALL="~/.gits/events/script.sh"
+    lifecycle scripts, in the environment or in .git/gits.sh
+    see LIFECYCLE.md, list of all of them: gits events
 
+All of the above are given to every lifecycle script (the first five with the values gits uses),
+together with GITS_EVENT_* - see LIFECYCLE.md, chapter Reference.
 
-
-
+The old names (GITSTORAGE...) are still read when the new one is not defined.

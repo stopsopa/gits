@@ -13,18 +13,23 @@
 #
 # When a new test is added in tests/ add it to the list below too.
 #
-# test001   --help, --version, GITSTORAGESOURCE is required
+# test001   --help, --version, GITS_SOURCE is required
 # test002   init, diff, isinsync, push
 # test003   init (restore from the storage), pull
 # test004   state, find
 # test005   migrate, migrate all, automatic migration
 # test006   add
-# test007   encrypted elements (SOURCE:e:TARGET) through GITSTORAGETENCRYPTIONSOCKET,
+# test007   encrypted elements (SOURCE:e:TARGET) through GITS_ENCRYPTION_SOCKET,
 #           with the real encoder process and the ssenc binary of submodules/encrypt
-# test008   init with a template, url, move, GITSTORAGETESHELL
+# test008   init with a template, url, move, GITS_SHELL
 # test009   --update (slow: compiles gits three times)
 # test010   Ctrl+C removes the temporary clone
 # test011   tests/encoder/encoder-start.sh, tests/encoder/encoder-stop.sh, the wrapper gits.sh
+# test012   lifecycle events: which events every command fires, what a script sees (dumps stay in tests/test012/tmp/dumps/)
+# test013   lifecycle events: stopping a command, scripts from the config, the replaceable FIND,
+#           the old names of the variables (GITSTORAGE...), gits events
+# test014   add in a terminal: the interactive list (which files, which of them encrypted),
+#           driven through a pseudo terminal by tests/terminal.py (needs python3)
 #
 
 CODE=0
@@ -124,6 +129,30 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test011/test.sh || CODE=1
+
+cat <<EEE
+
+=============== tests/test012/test.sh ===============
+
+EEE
+
+/bin/bash tests/test012/test.sh || CODE=1
+
+cat <<EEE
+
+=============== tests/test013/test.sh ===============
+
+EEE
+
+/bin/bash tests/test013/test.sh || CODE=1
+
+cat <<EEE
+
+=============== tests/test014/test.sh ===============
+
+EEE
+
+/bin/bash tests/test014/test.sh || CODE=1
 
 if [[ "${CODE}" = "0" ]]; then
   cat <<EEE

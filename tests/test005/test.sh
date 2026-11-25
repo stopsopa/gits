@@ -82,12 +82,12 @@ EXPECTED_BODY='#!/bin/bash
 
 # paths will be solved from directory where gitstorage-config.sh is
 
-GITSTORAGETARGETDIR="git@github.com:tmp__one.git"
+GITS_TARGETDIR="git@github.com:tmp__one.git"
 
-GITSTORAGELIST=(
-    "gits.sh::$GITSTORAGETARGETDIR/gits.sh"
-    "../file.txt::$GITSTORAGETARGETDIR/file.txt"
-    "../../other/.git/gitstorage-config.sh::$GITSTORAGETARGETDIR/other/gitstorage-config.sh"
+GITS_LIST=(
+    "gits.sh::$GITS_TARGETDIR/gits.sh"
+    "../file.txt::$GITS_TARGETDIR/file.txt"
+    "../../other/.git/gitstorage-config.sh::$GITS_TARGETDIR/other/gitstorage-config.sh"
 )'
 
 # ---------- gits migrate ----------

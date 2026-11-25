@@ -8,22 +8,22 @@
 #
 # Usage (from any directory):
 #
-#   export GITSTORAGETENCRYPTIONSOCKET="${HOME}/.gits/ssenc.sock"
+#   export GITS_ENCRYPTION_SOCKET="${HOME}/.gits/ssenc.sock"
 #   /bin/bash tests/encoder/encoder-stop.sh
 #
 # Env vars:
-#   GITSTORAGETENCRYPTIONSOCKET   required   the socket given to tests/encoder/encoder-start.sh
+#   GITS_ENCRYPTION_SOCKET   required   the socket given to tests/encoder/encoder-start.sh
 #
 # The log (<socket>.log) is left where it is.
 #
 
-SOCK="${GITSTORAGETENCRYPTIONSOCKET}"
+SOCK="${GITS_ENCRYPTION_SOCKET}"
 
 # "~/" at the beginning: inside of quotes the shell leaves it as it is
 SOCK="${SOCK/#\~\//${HOME}/}"
 
 if [[ -z "${SOCK}" ]]; then
-  echo "${0} error: env var GITSTORAGETENCRYPTIONSOCKET is not defined, it is the path of the socket of the encoder process"
+  echo "${0} error: env var GITS_ENCRYPTION_SOCKET is not defined, it is the path of the socket of the encoder process"
   exit 1
 fi
 

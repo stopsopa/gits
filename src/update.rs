@@ -4,6 +4,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use crate::cli::{cli, Options};
+use crate::events;
 use crate::util::{download, env, expand_tilde, is_url};
 use crate::VERSION;
 
@@ -293,6 +294,16 @@ fn install(
     new: &Path,
     old: &Path,
 ) -> Result<(), String> {
+    let event_args = [tag.to_string()];
+    let event_vars = [
+        ("GITS_EVENT_UPDATE_TAG", tag.to_string()),
+        (
+            "GITS_EVENT_UPDATE_INSTALLED",
+            installed.display().to_string(),
+        ),
+    ];
+    events::fire("BEFORE_DOWNLOAD", &event_args, &event_vars)?;
+
     println!("downloading {SUMS}");
     let sums = release_file(releases, tag, SUMS)?;
     let expected = sum_for(&String::from_utf8_lossy(&sums), asset)
@@ -319,6 +330,9 @@ fn install(
     reports(new, tag)
         .map_err(|e| format!("downloaded binary doesn't work here, nothing was changed: {e}"))?;
     println!("test ok: downloaded binary reports gits {tag}");
+    events::fire("AFTER_DOWNLOAD", &event_args, &event_vars)?;
+
+    events::fire("BEFORE_REPLACE", &event_args, &event_vars)?;
 
     fs::copy(installed, old)
         .map_err(|e| format!("can't make a copy of >{}<: {e}", installed.display()))?;
@@ -335,6 +349,7 @@ fn install(
         };
     }
     println!("test ok: installed binary reports gits {tag}");
+    events::fire("AFTER_REPLACE", &event_args, &event_vars)?;
     Ok(())
 }
 

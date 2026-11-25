@@ -5,7 +5,7 @@
 # What is tested, in this order:
 #
 #   1. init in a project the storage knows nothing about: .git/gits.sh is generated from the built-in
-#      template, with GITSTORAGETARGETDIR made from the url of remote origin. A second init changes
+#      template, with GITS_TARGETDIR made from the url of remote origin. A second init changes
 #      nothing. The generated config works as it is.
 #   2. diff when everything is new for the storage: exit code 1, content of the new files is shown,
 #      the list of changed local files (absolute paths) is printed above the final url, and the
@@ -20,7 +20,7 @@
 #      but ends with exit code 1, the file already stored is not removed from the storage
 #   7. a storage which can't be cloned: an error (isinsync: 2), and no temporary directory is left
 #   8. configs which could damage the storage or make no sense are refused: target in the root of
-#      the storage, target with "..", element without a separator, empty list, no GITSTORAGETARGETDIR
+#      the storage, target with "..", element without a separator, empty list, no GITS_TARGETDIR
 #
 # Needs: the compiled binary (/bin/bash compile.sh).
 #
@@ -53,7 +53,7 @@ if [[ -d "${_DIR}/tmp" ]]; then
 fi
 
 # Shared setup: creates ${WORK} (= tmp/ next to this file) with an empty HOME, own git config and
-# an empty storage repository in ${WORK}/GITSTORAGESOURCE, goes to ${WORK}, and defines function "test"
+# an empty storage repository in ${WORK}/GITS_SOURCE, goes to ${WORK}, and defines function "test"
 # (bash/test.sh) and the helpers used below (gits, has, listing, stored, storage_commits, project, ...)
 source "${_DIR}/../_lib.sh"
 
@@ -79,7 +79,7 @@ LISTING=".git test.txt with space.txt"
 
 # ---------- init: nothing in the storage for this project, the built-in template is used ----------
 
-# The storage is empty, so there is no config of this project to restore, and GITSTORAGETEMPLATE
+# The storage is empty, so there is no config of this project to restore, and GITS_TEMPLATE
 # is not defined: the config is generated from the template built into the binary.
 COMMAND='gits init 2>&1 | has ".git/gits.sh generated (built-in template)"'
 EXPECTED_STDOUT=".git/gits.sh generated (built-in template)"
@@ -88,13 +88,13 @@ EXPECTED_CODE="0"
 test "init"
 
 # Three fragments which have to be in the generated config:
-#   F1  GITSTORAGETARGETDIR is the name made from remote origin
+#   F1  GITS_TARGETDIR is the name made from remote origin
 #   F2  the remote is mentioned in a comment
-#   F3  the first element of the list is the config itself (written with $GITSTORAGETARGETDIR,
+#   F3  the first element of the list is the config itself (written with $GITS_TARGETDIR,
 #       in single quotes here so the test doesn't expand it)
-F1="GITSTORAGETARGETDIR=\"${D}\""
+F1="GITS_TARGETDIR=\"${D}\""
 F2="# used in git@github.com:tmp/repo.git"
-F3='"gits.sh::$GITSTORAGETARGETDIR/gits.sh"'
+F3='"gits.sh::$GITS_TARGETDIR/gits.sh"'
 
 # all three are found in .git/gits.sh
 COMMAND='cat .git/gits.sh | has "${F1}" "${F2}" "${F3}"'
@@ -103,7 +103,7 @@ ${F2}
 ${F3}"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
-test "init: GITSTORAGETARGETDIR made from remote origin, remote in the comment, the config stores itself"
+test "init: GITS_TARGETDIR made from remote origin, remote in the comment, the config stores itself"
 
 # init wrote only .git/gits.sh: nothing new next to the files of the project
 COMMAND='listing'
@@ -140,7 +140,7 @@ test "the generated config works as it is: not in sync, the storage is empty"
 
 # The config for the rest of the test, written by hand, with every kind of SOURCE:
 #   gits.sh              relative: resolved from .git, so it is .git/gits.sh (the config itself)
-#   xx.ts                another file in .git, target written as ${GITSTORAGETARGETDIR} (with braces)
+#   xx.ts                another file in .git, target written as ${GITS_TARGETDIR} (with braces)
 #   ../test.txt          a file of the project
 #   ../with space.txt    spaces in SOURCE and in TARGET, and TARGET in a subdirectory
 #   ~/.config/h.conf     a file from home
@@ -149,16 +149,16 @@ test "the generated config works as it is: not in sync, the storage is empty"
 cat <<EEE > .git/gits.sh
 #!/bin/bash
 
-GITSTORAGETARGETDIR="${D}"
+GITS_TARGETDIR="${D}"
 
-GITSTORAGELIST=(
-    "gits.sh::\$GITSTORAGETARGETDIR/gits.sh"
-    "xx.ts::\${GITSTORAGETARGETDIR}/xx.ts"
-    "../test.txt::\$GITSTORAGETARGETDIR/test.txt"
+GITS_LIST=(
+    "gits.sh::\$GITS_TARGETDIR/gits.sh"
+    "xx.ts::\${GITS_TARGETDIR}/xx.ts"
+    "../test.txt::\$GITS_TARGETDIR/test.txt"
 
     # comment between elements
-    "../with space.txt::\$GITSTORAGETARGETDIR/sub dir/with space.txt"
-    "~/.config/h.conf::\$GITSTORAGETARGETDIR/home/h.conf"
+    "../with space.txt::\$GITS_TARGETDIR/sub dir/with space.txt"
+    "~/.config/h.conf::\$GITS_TARGETDIR/home/h.conf"
 )
 EEE
 
@@ -171,12 +171,12 @@ EEE
 #   "+test file", "+from home"       files which are new for the storage are shown with their content
 #   "final url ..."                  where the project is in the storage (a local directory here, not a web page)
 #   "gits cleaning ${WORK}/repo/"    the temporary clone is removed at the end
-COMMAND='gits diff 2>&1 | has "_TARGETGITDIR: ${WORK}/repo/" "files are not in sync" "+test file" "+from home" "final url ${GITSTORAGESOURCE} (directory ${D})" "gits cleaning ${WORK}/repo/"'
+COMMAND='gits diff 2>&1 | has "_TARGETGITDIR: ${WORK}/repo/" "files are not in sync" "+test file" "+from home" "final url ${GITS_SOURCE} (directory ${D})" "gits cleaning ${WORK}/repo/"'
 EXPECTED_STDOUT="_TARGETGITDIR: ${WORK}/repo/
 files are not in sync
 +test file
 +from home
-final url ${GITSTORAGESOURCE} (directory ${D})
+final url ${GITS_SOURCE} (directory ${D})
 gits cleaning ${WORK}/repo/"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
@@ -185,7 +185,7 @@ test "first diff: temporary directory in pwd, content of new files in the diff, 
 # The part of the output from "changed files:" to "final url", compared exactly:
 # the block with absolute paths of the local files which differ is printed just above the final url.
 # Everything is new for the storage, so every file of the list is there, in the order of
-# GITSTORAGELIST: the two from .git, the two from the project, the one from home.
+# GITS_LIST: the two from .git, the two from the project, the one from home.
 COMMAND='gits diff 2>&1 | sed -n "/^changed files:/,/^final url/p"'
 EXPECTED_STDOUT="changed files:
   ${WORK}/repo/.git/gits.sh
@@ -194,7 +194,7 @@ EXPECTED_STDOUT="changed files:
   ${WORK}/repo/with space.txt
   ${HOME}/.config/h.conf
 
-final url ${GITSTORAGESOURCE} (directory ${D})"
+final url ${GITS_SOURCE} (directory ${D})"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "first diff: list of changed local files, also the one from home and the one with a space"
@@ -349,7 +349,7 @@ COMMAND='gits diff 2>&1 | sed -n "/^changed files:/,/^final url/p"'
 EXPECTED_STDOUT="changed files:
   ${WORK}/repo/test.txt
 
-final url ${GITSTORAGESOURCE} (directory ${D})"
+final url ${GITS_SOURCE} (directory ${D})"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "diff after a change: list of changed local files above the final url"
@@ -409,14 +409,14 @@ test "in sync again"
 
 # For this one call the storage points to a directory which doesn't exist. git clone fails:
 # gits reports which storage it could not clone, exit code 1.
-COMMAND='GITSTORAGESOURCE="${WORK}/nothing-here" gits diff 2>&1 | has "can'"'"'t clone storage GITSTORAGESOURCE=>${WORK}/nothing-here<"'
-EXPECTED_STDOUT="can't clone storage GITSTORAGESOURCE=>${WORK}/nothing-here<"
+COMMAND='GITS_SOURCE="${WORK}/nothing-here" gits diff 2>&1 | has "can'"'"'t clone storage GITS_SOURCE=>${WORK}/nothing-here<"'
+EXPECTED_STDOUT="can't clone storage GITS_SOURCE=>${WORK}/nothing-here<"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "storage not reachable: diff"
 
 # The same with isinsync: exit code 2. It must not answer 1, that would mean "the files differ".
-COMMAND='GITSTORAGESOURCE="${WORK}/nothing-here" gits isinsync 2> /dev/null'
+COMMAND='GITS_SOURCE="${WORK}/nothing-here" gits isinsync 2> /dev/null'
 EXPECTED_STDOUT=""
 EXPECTED_STDERR=""
 EXPECTED_CODE="2"
@@ -436,7 +436,7 @@ CONFIG="$(cat .git/gits.sh)"
 
 # A config whose TARGET is a file directly in the root of the storage ("xx.ts"),
 # where it would mix with the directories of all projects.
-printf 'GITSTORAGETARGETDIR="%s"\nGITSTORAGELIST=(\n  "xx.ts::xx.ts"\n)\n' "${D}" > .git/gits.sh
+printf 'GITS_TARGETDIR="%s"\nGITS_LIST=(\n  "xx.ts::xx.ts"\n)\n' "${D}" > .git/gits.sh
 
 # push refuses it with exit code 1 and says where the target should be
 F1="target file 'xx.ts' should be in a directory, like 'xxx/xx.ts'"
@@ -448,7 +448,7 @@ test "target in the root of the storage"
 
 # A TARGET which climbs out of the directory of the project with "..": it could overwrite files
 # of another project or land outside of the clone.
-printf 'GITSTORAGETARGETDIR="%s"\nGITSTORAGELIST=(\n  "xx.ts::$GITSTORAGETARGETDIR/../../xx.ts"\n)\n' "${D}" > .git/gits.sh
+printf 'GITS_TARGETDIR="%s"\nGITS_LIST=(\n  "xx.ts::$GITS_TARGETDIR/../../xx.ts"\n)\n' "${D}" > .git/gits.sh
 
 # refused, exit code 1
 F1="must not contain '..'"
@@ -459,7 +459,7 @@ EXPECTED_CODE="1"
 test "target with .."
 
 # An element which is only a path: neither "::" nor ":e:" in it, so there is no TARGET.
-printf 'GITSTORAGETARGETDIR="%s"\nGITSTORAGELIST=(\n  "xx.ts"\n)\n' "${D}" > .git/gits.sh
+printf 'GITS_TARGETDIR="%s"\nGITS_LIST=(\n  "xx.ts"\n)\n' "${D}" > .git/gits.sh
 
 # refused already by diff (the config is checked when it is read), exit code 1
 F1='is neither "SOURCE::TARGET" nor "SOURCE:e:TARGET"'
@@ -470,7 +470,7 @@ EXPECTED_CODE="1"
 test "element without separator"
 
 # A config with a list without any element.
-printf 'GITSTORAGETARGETDIR="%s"\nGITSTORAGELIST=(\n)\n' "${D}" > .git/gits.sh
+printf 'GITS_TARGETDIR="%s"\nGITS_LIST=(\n)\n' "${D}" > .git/gits.sh
 
 # refused: an empty list is taken for a mistake, not for "nothing to do"
 F1="shouldn't be empty"
@@ -480,16 +480,16 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "empty list"
 
-# A config which doesn't set GITSTORAGETARGETDIR at all.
-printf 'GITSTORAGELIST=(\n  "xx.ts::d/xx.ts"\n)\n' > .git/gits.sh
+# A config which doesn't set GITS_TARGETDIR at all.
+printf 'GITS_LIST=(\n  "xx.ts::d/xx.ts"\n)\n' > .git/gits.sh
 
 # refused, exit code 1
-F1="doesn't define GITSTORAGETARGETDIR"
+F1="doesn't define GITS_TARGETDIR"
 COMMAND='gits diff 2>&1 | has "${F1}"'
 EXPECTED_STDOUT="${F1}"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
-test "no GITSTORAGETARGETDIR"
+test "no GITS_TARGETDIR"
 
 # the good config is back
 echo "${CONFIG}" > .git/gits.sh

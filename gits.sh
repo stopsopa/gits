@@ -7,7 +7,7 @@
 #
 # Register it in ~/.bashrc or ~/.zshrc ("~/" at the beginning of the paths means home directory):
 #
-#   export GITSTORAGESOURCE="git@github.com:you/storage.git"
+#   export GITS_SOURCE="git@github.com:you/storage.git"
 #   export GITS_BIN="/path/to/gits"                              # the binary (compile.sh or a release)
 #   export GITS_ENCODER_SSH_KEY="~/.ssh/id_ed25519.pub"          # the key to encrypt with
 #   alias gits='/bin/bash "/path/to/this/repository/gits.sh"'
@@ -22,7 +22,7 @@
 #   GITS_ENCODER_SSH_KEY          optional   when defined: the encoder process is started with this key
 #                                            if it doesn't run yet (tests/encoder/encoder-start.sh)
 #                                            when not defined: nothing is started, the binary is called as it is
-#   GITSTORAGETENCRYPTIONSOCKET   optional   socket of the encoder process, default ~/.gits/ssenc.sock
+#   GITS_ENCRYPTION_SOCKET   optional   socket of the encoder process, default ~/.gits/ssenc.sock
 #                                            (only when GITS_ENCODER_SSH_KEY is defined)
 #   GITS_ENCODER_DIR              optional   see tests/encoder/encoder-start.sh
 #   ... and everything the binary reads: gits --help
@@ -62,10 +62,10 @@ if [[ ! -x "${BIN}" || -d "${BIN}" ]]; then
 fi
 
 if [[ -n "${GITS_ENCODER_SSH_KEY}" ]]; then
-  if [[ -z "${GITSTORAGETENCRYPTIONSOCKET}" ]]; then
-    export GITSTORAGETENCRYPTIONSOCKET="${HOME}/.gits/ssenc.sock"
+  if [[ -z "${GITS_ENCRYPTION_SOCKET}" ]]; then
+    export GITS_ENCRYPTION_SOCKET="${HOME}/.gits/ssenc.sock"
   fi
-  export GITSTORAGETENCRYPTIONSOCKET="${GITSTORAGETENCRYPTIONSOCKET/#\~\//${HOME}/}"
+  export GITS_ENCRYPTION_SOCKET="${GITS_ENCRYPTION_SOCKET/#\~\//${HOME}/}"
 
   STARTED="$(/bin/bash "${_DIR}/tests/encoder/encoder-start.sh" 2>&1)"
 

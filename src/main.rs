@@ -1,6 +1,8 @@
 mod cli;
 mod commands;
 mod config;
+mod events;
+mod menu;
 mod ops;
 mod socket;
 mod update;
@@ -8,22 +10,22 @@ mod util;
 
 use std::path::PathBuf;
 
-use util::{env, red, yellow};
+use util::{env_any, env_named, red, yellow};
 
 // the pushed tag for a release, "dev" for every other build (build.rs)
 pub const VERSION: &str = env!("GITS_BUILD_VERSION");
 
-pub const ENV_SOURCE: &str = "GITSTORAGESOURCE";
+pub const ENV_SOURCE: &str = "GITS_SOURCE";
 
 // what every command needs
 pub struct Ctx {
     // directory gits was started in
     pub cwd: PathBuf,
-    // GITSTORAGESOURCE: the storage repository
+    // GITS_SOURCE: the storage repository
     pub source: String,
-    // GITSTORAGETENCRYPTIONSOCKET
+    // GITS_ENCRYPTION_SOCKET
     pub socket: Option<String>,
-    // GITSTORAGETEMPLATE
+    // GITS_TEMPLATE
     pub template: Option<String>,
 }
 
@@ -85,9 +87,16 @@ fn env_table() -> String {
     let rows: Vec<[String; 4]> = VARS
         .iter()
         .map(|v| {
-            let found = env(v.name);
-            let used = match (&found, v.default.is_empty()) {
-                (Some(value), _) => value.clone(),
+            let named = env_named(v.name);
+            let found = named.as_ref().map(|(value, from)| {
+                if from == v.name {
+                    value.clone()
+                } else {
+                    format!("{value} (from {from})")
+                }
+            });
+            let used = match (&named, v.default.is_empty()) {
+                (Some((value, _)), _) => value.clone(),
                 (None, false) => v.default.to_string(),
                 (None, true) if v.required => "MISSING (required)".to_string(),
                 (None, true) => "(not used)".to_string(),
@@ -129,7 +138,7 @@ fn env_table() -> String {
     out.push_str(&format!("  {}\n", separator.join("-|-")));
     for (row, var) in rows.iter().zip(VARS.iter()) {
         let text = line([&row[0], &row[1], &row[2], &row[3]]);
-        if var.required && env(var.name).is_none() {
+        if var.required && env_any(var.name).is_none() {
             out.push_str(&red(&text));
         } else {
             out.push_str(&text);
@@ -151,11 +160,11 @@ gits {VERSION}
 Keeps files which don't belong to the repository of a project (.env, local configs, dotfiles)
 in one private git repository, the storage. Each project describes its files in .git/gits.sh:
 
-    GITSTORAGETARGETDIR="git@github.com:owner__repo.git"     # directory of the project in the storage
-    GITSTORAGELIST=(
-        "gits.sh::$GITSTORAGETARGETDIR/gits.sh"              # "SOURCE::TARGET"    stored as it is
-        "../.env:e:$GITSTORAGETARGETDIR/.env"                # "SOURCE:e:TARGET"   stored encrypted
-        "~/.zshrc::$GITSTORAGETARGETDIR/.zshrc"
+    GITS_TARGETDIR="git@github.com:owner__repo.git"     # directory of the project in the storage
+    GITS_LIST=(
+        "gits.sh::$GITS_TARGETDIR/gits.sh"              # "SOURCE::TARGET"    stored as it is
+        "../.env:e:$GITS_TARGETDIR/.env"                # "SOURCE:e:TARGET"   stored encrypted
+        "~/.zshrc::$GITS_TARGETDIR/.zshrc"
     )
 
     SOURCE  file on this machine: absolute, starting with ~/, or relative to .git
@@ -178,8 +187,11 @@ In the root of a project (the directory with .git):
   gits push --yes       local files -> storage (commit and push). Without --yes nothing is changed
   gits pull --yes       storage -> local files (they are overwritten). Without --yes nothing is changed
   gits url              web address of the directory of this project in the storage
-  gits add [-e] <file|directory> ...
-                        register files in .git/gits.sh (only the config is changed). -e: as encrypted
+  gits add [-e] [--yes] <file|directory> ...
+                        register files in .git/gits.sh (only the config is changed).
+                        In a terminal the found files are listed first: tick which ones to add
+                        and which of them as encrypted, ctrl+enter writes them.
+                        -e: encrypted from the start. --yes: no list, add everything found
   gits move <old remote> <new remote>
                         print the procedure of renaming the directory in the storage after
                         the remote 'origin' of the project changed
@@ -196,18 +208,69 @@ The tool itself:
   gits --update <tag>      install the given release (also an older one), e.g. v0.1.0
   gits --update --check    only say whether there is something newer, change nothing
 
+Lifecycle events: your scripts run between the stages of every command (see LIFECYCLE.md)
+
+  gits events              every event of every command, and which ones have a script right now
+  gits events --examples <directory>
+                           write an example script of every event (with everything it gets
+                           documented at its top) into the directory
+
 Environment variables:
 
 "#
     );
     out.push_str(&env_table());
-    if env(ENV_SOURCE).is_none() {
+    if env_any(ENV_SOURCE).is_none() {
         out.push('\n');
         out.push_str(&red(&format!(
             "  {ENV_SOURCE} is not defined: only --help, --version and --update work without it.\n  Add to ~/.zshrc or ~/.bashrc:\n\n    export {ENV_SOURCE}=\"git@github.com:<owner>/<storage repository>.git\"\n"
         )));
     }
     out
+}
+
+// the command itself, between the events START and END
+fn dispatch(
+    command: &str,
+    rest: &[String],
+    yes: bool,
+    encrypt: bool,
+    cwd: PathBuf,
+) -> Result<i32, String> {
+    events::fire("START", &[], &[])?;
+
+    if command == "update" {
+        return update::run(rest);
+    }
+
+    // checked before anything else: nothing (besides help, version, events and update) works without the storage
+    let Some(source) = env_any(ENV_SOURCE) else {
+        return Err(format!(
+            "env var {ENV_SOURCE} is not defined or empty, it has to point to the storage repository, e.g.:\n\n  export {ENV_SOURCE}=\"git@github.com:<owner>/<storage repository>.git\"\n\nsee: gits --help"
+        ));
+    };
+
+    let ctx = Ctx {
+        cwd,
+        source,
+        socket: env_any(socket::ENV_SOCKET),
+        template: env_any(commands::ENV_TEMPLATE),
+    };
+
+    match command {
+        "state" => ops::state(&ctx),
+        "find" => commands::find(&ctx),
+        "diff" => ops::diff(&ctx),
+        "isinsync" => ops::isinsync(&ctx),
+        "push" => ops::push(&ctx, yes),
+        "pull" => ops::pull(&ctx, yes),
+        "url" => ops::url(&ctx),
+        "init" => commands::init(&ctx),
+        "add" => commands::add(&ctx, rest, encrypt, yes),
+        "move" => commands::mv(&ctx, rest),
+        "migrate" => commands::migrate(&ctx, rest),
+        other => Err(format!("unknown command >{other}<, see: gits --help")),
+    }
 }
 
 fn run() -> i32 {
@@ -224,8 +287,8 @@ fn run() -> i32 {
             println!("gits {VERSION}");
             return 0;
         }
-        "--update" => {
-            return match update::run(&args[1..]) {
+        "events" => {
+            return match events::run(&args[1..]) {
                 Ok(code) => code,
                 Err(e) => {
                     eprintln!("{}", red(&format!("gits error: {e}")));
@@ -239,35 +302,31 @@ fn run() -> i32 {
     let mut yes = false;
     let mut encrypt = false;
     let mut positional: Vec<String> = Vec::new();
-    for arg in &args {
-        match arg.as_str() {
-            "--yes" => yes = true,
-            "-e" | "--encrypt" => encrypt = true,
-            flag if flag.starts_with('-') && flag.len() > 1 => {
-                eprintln!(
-                    "{}",
-                    red(&format!(
-                        "gits error: unsupported flag {flag}, see: gits --help"
-                    ))
-                );
-                return 1;
+    // --update has arguments of its own (--check, a tag)
+    let is_update = first == "--update";
+    if is_update {
+        positional.push("update".to_string());
+        positional.extend(args[1..].iter().cloned());
+    } else {
+        for arg in &args {
+            match arg.as_str() {
+                "--yes" => yes = true,
+                "-e" | "--encrypt" => encrypt = true,
+                flag if flag.starts_with('-') && flag.len() > 1 => {
+                    eprintln!(
+                        "{}",
+                        red(&format!(
+                            "gits error: unsupported flag {flag}, see: gits --help"
+                        ))
+                    );
+                    return 1;
+                }
+                _ => positional.push(arg.clone()),
             }
-            _ => positional.push(arg.clone()),
         }
     }
     let command = positional.first().cloned().unwrap_or_default();
     let rest = &positional[1.min(positional.len())..];
-
-    // checked before anything else: nothing (besides help, version and update) works without the storage
-    let Some(source) = env(ENV_SOURCE) else {
-        eprintln!(
-            "{}",
-            red(&format!(
-                "gits error: env var {ENV_SOURCE} is not defined or empty, it has to point to the storage repository, e.g.:\n\n  export {ENV_SOURCE}=\"git@github.com:<owner>/<storage repository>.git\"\n\nsee: gits --help"
-            ))
-        );
-        return 1;
-    };
 
     let cwd = match std::env::current_dir() {
         Ok(d) => d,
@@ -280,32 +339,17 @@ fn run() -> i32 {
         }
     };
 
-    let ctx = Ctx {
-        cwd,
-        source,
-        socket: env(socket::ENV_SOCKET),
-        template: env(commands::ENV_TEMPLATE),
-    };
+    events::init(&command, &cwd, &args);
 
-    let result = match command.as_str() {
-        "state" => ops::state(&ctx),
-        "find" => commands::find(&ctx),
-        "diff" => ops::diff(&ctx),
-        "isinsync" => ops::isinsync(&ctx),
-        "push" => ops::push(&ctx, yes),
-        "pull" => ops::pull(&ctx, yes),
-        "url" => ops::url(&ctx),
-        "init" => commands::init(&ctx),
-        "add" => commands::add(&ctx, rest, encrypt),
-        "move" => commands::mv(&ctx, rest),
-        "migrate" => commands::migrate(&ctx, rest),
-        other => Err(format!("unknown command >{other}<, see: gits --help")),
-    };
-
-    match result {
+    let code = match dispatch(&command, rest, yes, encrypt, cwd) {
         Ok(code) => code,
         Err(e) => {
             eprintln!("{}", red(&format!("gits error: {e}")));
+            events::fire_quietly(
+                "ERROR",
+                std::slice::from_ref(&e),
+                &[("GITS_EVENT_ERROR", e.clone())],
+            );
             // isinsync: 1 means "not in sync", an error must not look like it
             if command == "isinsync" {
                 2
@@ -313,7 +357,16 @@ fn run() -> i32 {
                 1
             }
         }
-    }
+    };
+
+    // everything temporary is removed by now (also after Ctrl+C: then the exit code is 130)
+    let code = if util::interrupted() { 130 } else { code };
+    events::fire_quietly(
+        "END",
+        &[code.to_string()],
+        &[("GITS_EVENT_EXIT_CODE", code.to_string())],
+    );
+    code
 }
 
 fn main() {

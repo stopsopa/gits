@@ -1,8 +1,8 @@
 #
-# Encrypted elements: "SOURCE:e:TARGET" in GITSTORAGELIST means "store this file encrypted".
+# Encrypted elements: "SOURCE:e:TARGET" in GITS_LIST means "store this file encrypted".
 #
 # gits doesn't encrypt by itself and starts no program for it. It connects to the unix socket from
-# env var GITSTORAGETENCRYPTIONSOCKET and sends one line per file to the process listening there:
+# env var GITS_ENCRYPTION_SOCKET and sends one line per file to the process listening there:
 #
 #   encode "<plain file>" "<encrypted file>"
 #   decode "<encrypted file>" "<plain file>"
@@ -27,7 +27,7 @@
 #     diff pushes nothing; the push changes in the stored file only the edited line and the seal line
 #  4. pull writes the files decrypted
 #  5. state decrypts too
-#  6. GITSTORAGETENCRYPTIONSOCKET not defined: every command explains it, isinsync exits with 2
+#  6. GITS_ENCRYPTION_SOCKET not defined: every command explains it, isinsync exits with 2
 #  7. a socket nobody listens on: error, nothing pushed, nothing left behind
 #  8. the encoder process has another key: nothing is decrypted, the local file is not overwritten
 #     by pull, nothing is pushed
@@ -62,13 +62,13 @@ fi
 
 source "${_DIR}/../_lib.sh"
 
-# directory of the project in the storage (GITSTORAGETARGETDIR), made from the remote below
+# directory of the project in the storage (GITS_TARGETDIR), made from the remote below
 D="git@github.com:tmp__repo.git"
 
 # ssenc_build:   compiles submodules/encrypt/rust/target/release/ssenc when it is not there yet
 # encoder_start: makes the demo key "key-one", starts the private ssh-agent and loads the key into it,
 #                starts the encoder process with that key (tests/encoder/encoder-start.sh) and exports
-#                GITSTORAGETENCRYPTIONSOCKET - from here on gits finds the encoder process
+#                GITS_ENCRYPTION_SOCKET - from here on gits finds the encoder process
 ssenc_build
 encoder_start key-one
 
@@ -90,12 +90,12 @@ printf 'a "quoted" name\n' > 'we"ird name.txt'
 # itself). The last element is written in two pieces of shell quoting only because of the quote in
 # the name; its TARGET is in a subdirectory with a space ("sub dir").
 cat <<EEE > .git/gits.sh
-GITSTORAGETARGETDIR="${D}"
-GITSTORAGELIST=(
-    "gits.sh::\$GITSTORAGETARGETDIR/gits.sh"
-    "../.env:e:\$GITSTORAGETARGETDIR/.env"
-    "../plain.txt::\$GITSTORAGETARGETDIR/plain.txt"
-    '../we"ird name.txt:e:'"\$GITSTORAGETARGETDIR/sub dir/we\"ird name.txt"
+GITS_TARGETDIR="${D}"
+GITS_LIST=(
+    "gits.sh::\$GITS_TARGETDIR/gits.sh"
+    "../.env:e:\$GITS_TARGETDIR/.env"
+    "../plain.txt::\$GITS_TARGETDIR/plain.txt"
+    '../we"ird name.txt:e:'"\$GITS_TARGETDIR/sub dir/we\"ird name.txt"
 )
 EEE
 
@@ -256,7 +256,7 @@ COMMAND='gits diff 2>&1 | sed -n "/^changed files:/,/^final url/p"'
 EXPECTED_STDOUT="changed files:
   ${WORK}/repo/.env
 
-final url ${GITSTORAGESOURCE} (directory ${D})"
+final url ${GITS_SOURCE} (directory ${D})"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "diff after an edit: the local file of the encrypted element is in the list of changed files"
@@ -351,14 +351,14 @@ printf 'A=1\nB=22\nC=3\n' > .env
 # ---------- no socket defined: explained, nothing happens ----------
 
 # the env var is gone: gits has no idea where the encoder process is (it still runs)
-unset GITSTORAGETENCRYPTIONSOCKET
+unset GITS_ENCRYPTION_SOCKET
 
 # every command which has to decrypt or encrypt
 for CMD in diff "push --yes" "pull --yes"; do
   # it doesn't guess a socket and doesn't treat the element as plain: it says which env var is
   # missing, exit code 1
-  COMMAND="gits ${CMD} 2>&1 | has 'env var GITSTORAGETENCRYPTIONSOCKET is not defined'"
-  EXPECTED_STDOUT="env var GITSTORAGETENCRYPTIONSOCKET is not defined"
+  COMMAND="gits ${CMD} 2>&1 | has 'env var GITS_ENCRYPTION_SOCKET is not defined'"
+  EXPECTED_STDOUT="env var GITS_ENCRYPTION_SOCKET is not defined"
   EXPECTED_STDERR=""
   EXPECTED_CODE="1"
   test "${CMD} without socket"
@@ -375,10 +375,10 @@ test "isinsync without socket is an error"
 # ---------- nobody listens ----------
 
 # the env var points to a socket file which doesn't exist
-export GITSTORAGETENCRYPTIONSOCKET="${WORK}/nobody.sock"
+export GITS_ENCRYPTION_SOCKET="${WORK}/nobody.sock"
 
 # the error names the env var and the path it was given
-F1="can't connect to the encoder process on socket GITSTORAGETENCRYPTIONSOCKET=>${WORK}/nobody.sock<"
+F1="can't connect to the encoder process on socket GITS_ENCRYPTION_SOCKET=>${WORK}/nobody.sock<"
 
 # gits can't connect: error, exit code 1.
 COMMAND='gits diff 2>&1 | has "${F1}"'
@@ -517,9 +517,9 @@ test "encrypted -> plain: in sync after push"
 # the element which stores the config itself becomes an encrypted one
 sed -i.bak 's|"gits.sh::|"gits.sh:e:|' .git/gits.sh && rm .git/gits.sh.bak
 
-# push: exit code 0, and gits.sh in the storage is an ssenc file ("GITSTORAGELIST", a word of the
+# push: exit code 0, and gits.sh in the storage is an ssenc file ("GITS_LIST", a word of the
 # plain config, is asked for and must not be in it).
-COMMAND='gits push --yes > /dev/null 2>&1; echo "${?}"; stored "${D}/gits.sh" | has "#ssenc1" "GITSTORAGELIST"'
+COMMAND='gits push --yes > /dev/null 2>&1; echo "${?}"; stored "${D}/gits.sh" | has "#ssenc1" "GITS_LIST"'
 EXPECTED_STDOUT="0
 #ssenc1"
 EXPECTED_STDERR=""
@@ -534,8 +534,8 @@ cd two
 
 # init without the socket (the env var empty for this one command): the stored config is encrypted,
 # gits can't use it and must not write it as it is into .git. It explains, exit code 1.
-COMMAND='GITSTORAGETENCRYPTIONSOCKET="" gits init 2>&1 | has "is encrypted, define env var GITSTORAGETENCRYPTIONSOCKET"'
-EXPECTED_STDOUT="is encrypted, define env var GITSTORAGETENCRYPTIONSOCKET"
+COMMAND='GITS_ENCRYPTION_SOCKET="" gits init 2>&1 | has "is encrypted, define env var GITS_ENCRYPTION_SOCKET"'
+EXPECTED_STDOUT="is encrypted, define env var GITS_ENCRYPTION_SOCKET"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "init, encrypted config, no socket"

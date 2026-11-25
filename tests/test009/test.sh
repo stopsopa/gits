@@ -60,8 +60,8 @@ fi
 source "${_DIR}/../_lib.sh"
 
 # the setup defined the storage, and --update needs nothing of it: it has to work without
-# GITSTORAGESOURCE, like --help and --version
-unset GITSTORAGESOURCE
+# GITS_SOURCE, like --help and --version
+unset GITS_SOURCE
 
 # name of the file of a release for this machine, the same names gits looks for (src/update.rs)
 # and the release workflow publishes. On any other platform there is nothing to update to: the test

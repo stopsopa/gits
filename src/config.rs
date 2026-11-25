@@ -1,7 +1,9 @@
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use crate::cli::{cli, Options};
+use crate::events;
 use crate::util::{absolute, expand_tilde, git_out, random_hex, yellow};
 
 pub const GIT_DIR: &str = ".git";
@@ -9,7 +11,7 @@ pub const CONFIG: &str = "gits.sh";
 // config of the original gitstorage.sh, migrated to CONFIG when met
 pub const LEGACY: &str = "gitstorage-config.sh";
 
-pub const ENV_SHELL: &str = "GITSTORAGETESHELL";
+pub const ENV_SHELL: &str = "GITS_SHELL";
 pub const DEFAULT_SHELL: &str = "/bin/bash";
 
 pub const SEP_PLAIN: &str = "::";
@@ -29,7 +31,7 @@ pub struct Entry {
 
 #[derive(Debug)]
 pub struct Project {
-    // GITSTORAGETARGETDIR
+    // GITS_TARGETDIR
     pub target_dir: String,
     pub list: Vec<Entry>,
 }
@@ -56,7 +58,7 @@ pub fn split_entry(raw: &str) -> Result<(String, bool, String), String> {
         (None, Some(e)) => (e, SEP_ENCRYPTED.len(), true),
         (None, None) => {
             return Err(format!(
-                "element >{raw}< of GITSTORAGELIST is neither \"SOURCE::TARGET\" nor \"SOURCE:e:TARGET\""
+                "element >{raw}< of GITS_LIST is neither \"SOURCE::TARGET\" nor \"SOURCE:e:TARGET\""
             ))
         }
     };
@@ -64,7 +66,7 @@ pub fn split_entry(raw: &str) -> Result<(String, bool, String), String> {
     let target = raw[at + len..].to_string();
     if source.is_empty() || target.is_empty() {
         return Err(format!(
-            "element >{raw}< of GITSTORAGELIST has empty SOURCE or TARGET"
+            "element >{raw}< of GITS_LIST has empty SOURCE or TARGET"
         ));
     }
     Ok((source, is_encrypted, target))
@@ -110,19 +112,21 @@ pub fn valid_target(target: &str) -> Result<(), String> {
 }
 
 pub fn shell() -> String {
-    crate::util::env(ENV_SHELL).unwrap_or_else(|| DEFAULT_SHELL.to_string())
+    crate::util::env_any(ENV_SHELL).unwrap_or_else(|| DEFAULT_SHELL.to_string())
 }
 
 pub struct Loaded {
     pub project: Project,
     // whatever the config printed while it was executed
     pub output: String,
+    // lifecycle scripts the config defined: GITS_<COMMAND>_<EVENT> -> path (see events.rs)
+    pub scripts: HashMap<String, String>,
 }
 
 /**
  * The config is a shell script, so the only way to know what it defines is to execute it:
- * with the shell from GITSTORAGETESHELL, from the root of the project, and then to ask that shell
- * for GITSTORAGETARGETDIR and GITSTORAGELIST. Whatever the config prints is separated from that
+ * with the shell from GITS_SHELL, from the root of the project, and then to ask that shell
+ * for GITS_TARGETDIR and GITS_LIST. Whatever the config prints is separated from that
  * answer with a marker line.
  *
  * When .git/gits.sh is missing and .git/gitstorage-config.sh is there, it is migrated first.
@@ -146,19 +150,42 @@ pub fn load(dir: &Path, quiet: bool) -> Result<Loaded, String> {
     }
 
     let marker = format!("__gits_marker_{}_{}__", std::process::id(), random_hex(8));
+    /*
+     * $1 config, $2 marker, $3... names of the lifecycle variables the config may define.
+     * Answer: GITS_TARGETDIR, the elements of GITS_LIST, the marker again, "NAME=value" of every
+     * lifecycle variable which is defined - each ending with a NUL byte.
+     * Configs written before the rename (GITSTORAGETARGETDIR, GITSTORAGELIST) are read too.
+     * Works in bash and in zsh.
+     */
     let script = r#". "./$1"
-printf '\n%s\n' "$2"
-printf '%s\0' "$GITSTORAGETARGETDIR" "${GITSTORAGELIST[@]}"
+__gits_marker="$2"
+printf '\n%s\n' "$__gits_marker"
+if [ "${#GITS_LIST[@]}" -gt 0 ]; then
+  printf '%s\0' "${GITS_TARGETDIR:-$GITSTORAGETARGETDIR}" "${GITS_LIST[@]}"
+else
+  printf '%s\0' "${GITS_TARGETDIR:-$GITSTORAGETARGETDIR}" "${GITSTORAGELIST[@]}"
+fi
+printf '%s\0' "$__gits_marker"
+shift 2
+for __gits_name in "$@"; do
+  eval "__gits_value=\"\${$__gits_name}\""
+  if [ -n "$__gits_value" ]; then
+    printf '%s=%s\0' "$__gits_name" "$__gits_value"
+  fi
+done
 "#;
     let shell = shell();
     // what the config prints on stderr is shown at once, its stdout is needed here
     let config_file = format!("{GIT_DIR}/{CONFIG}");
-    let out = cli(
-        &shell,
-        ["-c", script, "gits", &config_file, &marker],
-        Options::new().pwd(&dir).forward_stderr(),
-    )
-    .map_err(|e| {
+    let mut args: Vec<String> = vec![
+        "-c".to_string(),
+        script.to_string(),
+        "gits".to_string(),
+        config_file,
+        marker.clone(),
+    ];
+    args.extend(events::names_for_config());
+    let out = cli(&shell, &args, Options::new().pwd(&dir).forward_stderr()).map_err(|e| {
         format!(
             "can't run shell {ENV_SHELL}=>{shell}< to read >{}<: {e}",
             config.display()
@@ -183,13 +210,29 @@ printf '%s\0' "$GITSTORAGETARGETDIR" "${GITSTORAGELIST[@]}"
     let target_dir = parts.next().unwrap_or_default();
     if target_dir.trim().is_empty() {
         return Err(format!(
-            "config >{}< doesn't define GITSTORAGETARGETDIR",
+            "config >{}< doesn't define GITS_TARGETDIR",
             config.display()
         ));
     }
 
     let mut list = Vec::new();
+    let mut scripts = HashMap::new();
+    let mut in_scripts = false;
     for raw in parts {
+        if raw == marker {
+            in_scripts = true;
+            continue;
+        }
+        if in_scripts {
+            if let Some((name, value)) = raw.split_once('=') {
+                // The shell which ran the config inherited the environment: a variable with the
+                // value it has in the environment was not defined by the config.
+                if crate::util::env(name).as_deref() != Some(value.trim()) {
+                    scripts.insert(name.to_string(), value.to_string());
+                }
+            }
+            continue;
+        }
         if raw.trim().is_empty() {
             continue;
         }
@@ -206,7 +249,7 @@ printf '%s\0' "$GITSTORAGETARGETDIR" "${GITSTORAGELIST[@]}"
 
     if list.is_empty() {
         return Err(format!(
-            "list GITSTORAGELIST in config >{}< shouldn't be empty",
+            "list GITS_LIST in config >{}< shouldn't be empty",
             config.display()
         ));
     }
@@ -214,6 +257,7 @@ printf '%s\0' "$GITSTORAGETARGETDIR" "${GITSTORAGELIST[@]}"
     Ok(Loaded {
         project: Project { target_dir, list },
         output,
+        scripts,
     })
 }
 
@@ -229,10 +273,13 @@ fn rfind(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /**
  * Content of gitstorage-config.sh -> content of gits.sh.
  * Only the element which stores the config itself is changed:
- *   "gitstorage-config.sh::$GITSTORAGETARGETDIR/gitstorage-config.sh"  ->  "gits.sh::$GITSTORAGETARGETDIR/gits.sh"
- * (":e:" and ${GITSTORAGETARGETDIR} forms too). Everything else stays byte for byte.
+ *   "gitstorage-config.sh::$GITS_TARGETDIR/gitstorage-config.sh"  ->  "gits.sh::$GITS_TARGETDIR/gits.sh"
+ * (":e:" and ${GITS_TARGETDIR} forms too), and the two variables get their new names:
+ *   GITSTORAGETARGETDIR -> GITS_TARGETDIR,   GITSTORAGELIST -> GITS_LIST
+ * Everything else stays byte for byte.
  */
 pub fn migrate_content(text: &str) -> String {
+    let text = &rename_variables(text);
     let mut out = String::with_capacity(text.len());
     for line in text.split_inclusive('\n') {
         let trimmed = line.trim_start();
@@ -259,6 +306,12 @@ pub fn migrate_content(text: &str) -> String {
     out
 }
 
+// names of the variables of a config written before the rename -> the new ones
+pub fn rename_variables(text: &str) -> String {
+    text.replace("GITSTORAGETARGETDIR", "GITS_TARGETDIR")
+        .replace("GITSTORAGELIST", "GITS_LIST")
+}
+
 /**
  * .git/gitstorage-config.sh -> .git/gits.sh, the old file is removed.
  * Ok(false): nothing to migrate.
@@ -277,6 +330,13 @@ pub fn migrate(dir: &Path, quiet: bool) -> Result<bool, String> {
             legacy.display()
         ));
     }
+
+    let names = [legacy.display().to_string(), config.display().to_string()];
+    let vars = [
+        ("GITS_EVENT_RENAME_FROM", names[0].clone()),
+        ("GITS_EVENT_RENAME_TO", names[1].clone()),
+    ];
+    events::fire("BEFORE_RENAME", &names, &vars)?;
 
     let text = fs::read_to_string(&legacy)
         .map_err(|e| format!("can't read >{}<: {e}", legacy.display()))?;
@@ -303,6 +363,7 @@ pub fn migrate(dir: &Path, quiet: bool) -> Result<bool, String> {
             ))
         );
     }
+    events::fire("AFTER_RENAME", &names, &vars)?;
     Ok(true)
 }
 
@@ -341,55 +402,88 @@ impl Found {
 
 /**
  * All projects below `base` (and `base` itself): directories with .git/gits.sh and/or
- * .git/gitstorage-config.sh. The equivalent of the original
+ * .git/gitstorage-config.sh.
+ *
+ * The search itself is the replaceable lifecycle event FIND: a script prints the paths of the
+ * config files, one per line. The default (events/defaults/FIND.sh) is the equivalent of the original
  *
  *   find . -type d -name 'node_modules' -prune -o -type f -name "gitstorage-config.sh" -print | grep "/.git/gitstorage-config.sh"
  *
- * for both names: node_modules is not entered, symlinks to directories are not followed.
- * Directories named .git are not entered either (nothing useful can be nested there, and it is
- * most of the files on the disk). Sorted.
+ * for both names. Whatever the script prints is checked here: only a real directory .git with
+ * that file in it counts. Sorted, each project once. Then the event FOUND.
  */
-pub fn find(base: &Path) -> Vec<Found> {
-    let mut found = Vec::new();
-    walk(base, ".", &mut found);
-    found.sort_by(|a, b| a.dir.cmp(&b.dir));
-    found
+pub fn find(base: &Path) -> Result<Vec<Found>, String> {
+    let printed = events::replace("FIND", events::DEFAULT_FIND, &[base.display().to_string()])?;
+    let found = parse_found(&printed, base);
+
+    let list: Vec<&str> = found.iter().map(|f| f.dir.as_str()).collect();
+    events::fire(
+        "FOUND",
+        &[found.len().to_string()],
+        &[
+            ("GITS_EVENT_FOUND_COUNT", found.len().to_string()),
+            ("GITS_EVENT_FOUND", list.join("\n")),
+        ],
+    )?;
+    Ok(found)
 }
 
-fn walk(dir: &Path, display: &str, found: &mut Vec<Found>) {
-    let git = dir.join(GIT_DIR);
-    let is_real_dir = fs::symlink_metadata(&git)
-        .map(|m| m.is_dir())
-        .unwrap_or(false);
-    if is_real_dir {
-        let config = git.join(CONFIG).is_file();
-        let legacy = git.join(LEGACY).is_file();
-        if config || legacy {
-            found.push(Found {
-                dir: display.to_string(),
-                config,
-                legacy,
-            });
+// lines ".../.git/gits.sh" and ".../.git/gitstorage-config.sh" -> projects
+fn parse_found(printed: &str, base: &Path) -> Vec<Found> {
+    // directory as it is shown ("." or "./a/b") -> (gits.sh, gitstorage-config.sh)
+    let mut projects: BTreeMap<String, (bool, bool)> = BTreeMap::new();
+
+    for line in printed.lines() {
+        let line = line.trim_end_matches('\r');
+        let (dir, is_config) = if let Some(dir) = line.strip_suffix(&format!("/{GIT_DIR}/{CONFIG}"))
+        {
+            (dir, true)
+        } else if let Some(dir) = line.strip_suffix(&format!("/{GIT_DIR}/{LEGACY}")) {
+            (dir, false)
+        } else {
+            continue;
+        };
+        let dir = if dir.is_empty() { "/" } else { dir };
+
+        // the script can be anything: only what is really there counts
+        let full = base.join(dir);
+        let git = full.join(GIT_DIR);
+        let real_dir = fs::symlink_metadata(&git)
+            .map(|m| m.is_dir())
+            .unwrap_or(false);
+        let file = git.join(if is_config { CONFIG } else { LEGACY });
+        if !real_dir || !file.is_file() {
+            continue;
+        }
+
+        let display = if Path::new(dir).is_absolute() {
+            match Path::new(dir).strip_prefix(base) {
+                Ok(inside) if inside.as_os_str().is_empty() => ".".to_string(),
+                Ok(inside) => format!("./{}", inside.display()),
+                Err(_) => dir.to_string(),
+            }
+        } else if dir == "." || dir.starts_with("./") {
+            dir.to_string()
+        } else {
+            format!("./{dir}")
+        };
+
+        let flags = projects.entry(display).or_insert((false, false));
+        if is_config {
+            flags.0 = true;
+        } else {
+            flags.1 = true;
         }
     }
 
-    let entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
-    for entry in entries.flatten() {
-        // file type of the entry itself: a symlink to a directory is not a directory here
-        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
-        if !is_dir {
-            continue;
-        }
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name == "node_modules" || name == GIT_DIR {
-            continue;
-        }
-        walk(&entry.path(), &format!("{display}/{name}"), found);
-    }
+    projects
+        .into_iter()
+        .map(|(dir, (config, legacy))| Found {
+            dir,
+            config,
+            legacy,
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -474,14 +568,12 @@ mod tests {
 
     #[test]
     fn migration_of_content() {
-        let old = "GITSTORAGETARGETDIR=\"x\"\n# paths are solved from the directory where gitstorage-config.sh is\nGITSTORAGELIST=(\n    \"gitstorage-config.sh::$GITSTORAGETARGETDIR/gitstorage-config.sh\"\n    \"../other/.git/gitstorage-config.sh::$GITSTORAGETARGETDIR/other/gitstorage-config.sh\"\n)\n";
-        let new = "GITSTORAGETARGETDIR=\"x\"\n# paths are solved from the directory where gitstorage-config.sh is\nGITSTORAGELIST=(\n    \"gits.sh::$GITSTORAGETARGETDIR/gits.sh\"\n    \"../other/.git/gitstorage-config.sh::$GITSTORAGETARGETDIR/other/gitstorage-config.sh\"\n)\n";
+        let old = "GITS_TARGETDIR=\"x\"\n# paths are solved from the directory where gitstorage-config.sh is\nGITS_LIST=(\n    \"gitstorage-config.sh::$GITS_TARGETDIR/gitstorage-config.sh\"\n    \"../other/.git/gitstorage-config.sh::$GITS_TARGETDIR/other/gitstorage-config.sh\"\n)\n";
+        let new = "GITS_TARGETDIR=\"x\"\n# paths are solved from the directory where gitstorage-config.sh is\nGITS_LIST=(\n    \"gits.sh::$GITS_TARGETDIR/gits.sh\"\n    \"../other/.git/gitstorage-config.sh::$GITS_TARGETDIR/other/gitstorage-config.sh\"\n)\n";
         assert_eq!(migrate_content(old), new);
         assert_eq!(
-            migrate_content(
-                "  \"gitstorage-config.sh:e:${GITSTORAGETARGETDIR}/gitstorage-config.sh\""
-            ),
-            "  \"gits.sh:e:${GITSTORAGETARGETDIR}/gits.sh\""
+            migrate_content("  \"gitstorage-config.sh:e:${GITS_TARGETDIR}/gitstorage-config.sh\""),
+            "  \"gits.sh:e:${GITS_TARGETDIR}/gits.sh\""
         );
         // already migrated content stays as it is
         assert_eq!(migrate_content(new), new);

@@ -13,13 +13,13 @@
 #    - SOURCE is written the way it is written by hand: "../x" for files of the project, "x" for files
 #      in .git, "~/x" for files in home, an absolute path for the rest
 #    - new lines go to the end of the list, with the indentation and the form of the variable
-#      (${GITSTORAGETARGETDIR} or $GITSTORAGETARGETDIR) the config already uses
+#      (${GITS_TARGETDIR} or $GITS_TARGETDIR) the config already uses
 #    - everything else in the config (comments, empty lines, code after the list) stays as it was
 #    - the storage is not touched and no file is created
 #    - the same directory given again: nothing is added
 # 5. The config made that way works: "gits push --yes" stores the files where the lines say.
 # 6. "gits add -e": the line is written with ":e:" (encrypted element).
-# 7. A config with an empty list: the default style is used (4 spaces, $GITSTORAGETARGETDIR).
+# 7. A config with an empty list: the default style is used (4 spaces, $GITS_TARGETDIR).
 # 8. A config whose list is written in one line: add refuses and leaves the file as it was.
 #
 # /bin/bash tests/test006/test.sh
@@ -49,7 +49,7 @@ fi
 
 source "${_DIR}/../_lib.sh"
 
-# directory of the project in the storage (GITSTORAGETARGETDIR), made from the remote below
+# directory of the project in the storage (GITS_TARGETDIR), made from the remote below
 D="git@github.com:tmp__repo.git"
 
 # an empty project with a remote and without any config yet; everything below runs in it
@@ -65,7 +65,7 @@ EXPECTED_CODE="1"
 test "add without config"
 
 # The config "gits add" will work on. Written with details which have to survive:
-#   - indentation of 2 spaces and the variable in the form ${GITSTORAGETARGETDIR}: new lines
+#   - indentation of 2 spaces and the variable in the form ${GITS_TARGETDIR}: new lines
 #     have to follow both
 #   - a comment above the list, a comment and an empty line inside of the list
 #   - code after the list (echo): the new lines must go into the list, not to the end of the file
@@ -73,14 +73,14 @@ test "add without config"
 cat <<EEE > .git/gits.sh
 #!/bin/bash
 
-GITSTORAGETARGETDIR="${D}"
+GITS_TARGETDIR="${D}"
 
 # list
-GITSTORAGELIST=(
-  "gits.sh::\${GITSTORAGETARGETDIR}/gits.sh"
+GITS_LIST=(
+  "gits.sh::\${GITS_TARGETDIR}/gits.sh"
 
   # keep me
-  "../.env::\${GITSTORAGETARGETDIR}/.env"
+  "../.env::\${GITS_TARGETDIR}/.env"
 )
 
 echo "after the list"
@@ -152,7 +152,7 @@ test "add: number of lines, reminder"
 # indentation and \${...} form are the ones the config already uses; ${WORK:1} = path without the first /
 # The whole config after that call:
 #   - the 5 new lines are at the end of the list, before ")", in the order they were given
-#   - each with the indentation (2 spaces) and the form \${GITSTORAGETARGETDIR} the config already uses
+#   - each with the indentation (2 spaces) and the form \${GITS_TARGETDIR} the config already uses
 #   - SOURCE: "../dir/..." for files of the project, "xx.ts" for the file in .git, "~/.zshrc" for the
 #     file in home, the absolute path for the file elsewhere
 #   - TARGET: the same relative path inside of the directory of the project in the storage; for the
@@ -161,19 +161,19 @@ test "add: number of lines, reminder"
 COMMAND='cat .git/gits.sh'
 EXPECTED_STDOUT="#!/bin/bash
 
-GITSTORAGETARGETDIR=\"${D}\"
+GITS_TARGETDIR=\"${D}\"
 
 # list
-GITSTORAGELIST=(
-  \"gits.sh::\${GITSTORAGETARGETDIR}/gits.sh\"
+GITS_LIST=(
+  \"gits.sh::\${GITS_TARGETDIR}/gits.sh\"
 
   # keep me
-  \"../.env::\${GITSTORAGETARGETDIR}/.env\"
-  \"../dir/a.txt::\${GITSTORAGETARGETDIR}/dir/a.txt\"
-  \"../dir/sub dir/b c.txt::\${GITSTORAGETARGETDIR}/dir/sub dir/b c.txt\"
-  \"xx.ts::\${GITSTORAGETARGETDIR}/xx.ts\"
-  \"~/.zshrc::\${GITSTORAGETARGETDIR}/.zshrc\"
-  \"${WORK}/elsewhere/e.txt::\${GITSTORAGETARGETDIR}/${WORK:1}/elsewhere/e.txt\"
+  \"../.env::\${GITS_TARGETDIR}/.env\"
+  \"../dir/a.txt::\${GITS_TARGETDIR}/dir/a.txt\"
+  \"../dir/sub dir/b c.txt::\${GITS_TARGETDIR}/dir/sub dir/b c.txt\"
+  \"xx.ts::\${GITS_TARGETDIR}/xx.ts\"
+  \"~/.zshrc::\${GITS_TARGETDIR}/.zshrc\"
+  \"${WORK}/elsewhere/e.txt::\${GITS_TARGETDIR}/${WORK:1}/elsewhere/e.txt\"
 )
 
 echo \"after the list\""
@@ -225,7 +225,7 @@ echo "secret" > secret.txt
 
 # the line "gits add -e" has to write, together with the ")" after it: it is the last line of the list
 # and the separator is ":e:" instead of "::"
-F1="  \"../secret.txt:e:\${GITSTORAGETARGETDIR}/secret.txt\"
+F1="  \"../secret.txt:e:\${GITS_TARGETDIR}/secret.txt\"
 )"
 
 # "gits add -e": the output of gits is dropped, only its exit code is printed (0), and then the
@@ -243,17 +243,17 @@ test "add -e"
 # A new config in place of the previous one: no element in the list, so there is no line to
 # take the indentation and the form of the variable from.
 cat <<EEE > .git/gits.sh
-GITSTORAGETARGETDIR="${D}"
-GITSTORAGELIST=(
+GITS_TARGETDIR="${D}"
+GITS_LIST=(
 )
 EEE
 
 # "gits add" to an empty list: the line is written in the default style, 4 spaces and
-# $GITSTORAGETARGETDIR without braces (the style of "gits init").
+# $GITS_TARGETDIR without braces (the style of "gits init").
 COMMAND='gits add .env > /dev/null 2>&1; cat .git/gits.sh'
-EXPECTED_STDOUT="GITSTORAGETARGETDIR=\"${D}\"
-GITSTORAGELIST=(
-    \"../.env::\$GITSTORAGETARGETDIR/.env\"
+EXPECTED_STDOUT="GITS_TARGETDIR=\"${D}\"
+GITS_LIST=(
+    \"../.env::\$GITS_TARGETDIR/.env\"
 )"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
@@ -263,18 +263,18 @@ test "add to an empty list: default style"
 
 # A config with the whole list in one line: there is no line with only ")" which "gits add"
 # looks for to put the new lines above it.
-echo 'GITSTORAGELIST=("a::b")' > .git/gits.sh
+echo 'GITS_LIST=("a::b")' > .git/gits.sh
 
 # "gits add" doesn't guess: it says that it can't find the end of the list, exit code 1.
-COMMAND='gits add .env 2>&1 | has "can'"'"'t find the end of GITSTORAGELIST"'
-EXPECTED_STDOUT="can't find the end of GITSTORAGELIST"
+COMMAND='gits add .env 2>&1 | has "can'"'"'t find the end of GITS_LIST"'
+EXPECTED_STDOUT="can't find the end of GITS_LIST"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "add to a config in one line"
 
 # And the config is byte for byte what it was: a refused add writes nothing.
 COMMAND='cat .git/gits.sh'
-EXPECTED_STDOUT='GITSTORAGELIST=("a::b")'
+EXPECTED_STDOUT='GITS_LIST=("a::b")'
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "add to a config in one line changes nothing"

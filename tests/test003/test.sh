@@ -52,7 +52,7 @@ if [[ -d "${_DIR}/tmp" ]]; then
 fi
 
 # Shared setup: creates ${WORK} (= tmp/ next to this file) with an empty HOME, own git config and
-# an empty storage repository in ${WORK}/GITSTORAGESOURCE, goes to ${WORK}, and defines function "test"
+# an empty storage repository in ${WORK}/GITS_SOURCE, goes to ${WORK}, and defines function "test"
 # (bash/test.sh) and the helpers used below (gits, has, listing, stored, storage_commits, project, ...)
 source "${_DIR}/../_lib.sh"
 
@@ -71,13 +71,13 @@ echo 'from home' > "${HOME}/.config/app/h.conf"
 # The config of the project: the config itself, the three files above and a file two directories
 # deep in the project (created just below).
 cat <<EEE > .git/gits.sh
-GITSTORAGETARGETDIR="${D}"
-GITSTORAGELIST=(
-    "gits.sh::\$GITSTORAGETARGETDIR/gits.sh"
-    "xx.ts::\$GITSTORAGETARGETDIR/xx.ts"
-    "../test.txt::\$GITSTORAGETARGETDIR/test.txt"
-    "../deep/dir/file.txt::\$GITSTORAGETARGETDIR/deep/dir/file.txt"
-    "~/.config/app/h.conf::\$GITSTORAGETARGETDIR/home/h.conf"
+GITS_TARGETDIR="${D}"
+GITS_LIST=(
+    "gits.sh::\$GITS_TARGETDIR/gits.sh"
+    "xx.ts::\$GITS_TARGETDIR/xx.ts"
+    "../test.txt::\$GITS_TARGETDIR/test.txt"
+    "../deep/dir/file.txt::\$GITS_TARGETDIR/deep/dir/file.txt"
+    "~/.config/app/h.conf::\$GITS_TARGETDIR/home/h.conf"
 )
 EEE
 # the file two directories deep
@@ -208,7 +208,7 @@ test "pull overwrites local edits"
 # One more element is appended to the local config: a file which was never pushed,
 # so the storage has nothing at its TARGET.
 cat <<EEE >> .git/gits.sh
-GITSTORAGELIST+=("../new.txt::\$GITSTORAGETARGETDIR/new.txt")
+GITS_LIST+=("../new.txt::\$GITS_TARGETDIR/new.txt")
 EEE
 
 # The config is an element of its own list, and pull takes the config first: the stored one is
@@ -240,10 +240,10 @@ test "pull restored the config too"
 # This config is not in its own list, so pull has no stored config to take first and works with
 # the local list as it is. new.txt was never pushed: the storage has nothing at its TARGET.
 cat <<EEE > .git/gits.sh
-GITSTORAGETARGETDIR="${D}"
-GITSTORAGELIST=(
-    "../test.txt::\$GITSTORAGETARGETDIR/test.txt"
-    "../new.txt::\$GITSTORAGETARGETDIR/new.txt"
+GITS_TARGETDIR="${D}"
+GITS_LIST=(
+    "../test.txt::\$GITS_TARGETDIR/test.txt"
+    "../new.txt::\$GITS_TARGETDIR/new.txt"
 )
 EEE
 
@@ -270,7 +270,7 @@ cp ../one/.git/gits.sh .git/gits.sh
 cd ../one
 echo 'added later' > later.txt
 cat <<EEE >> .git/gits.sh
-GITSTORAGELIST+=("../later.txt::\$GITSTORAGETARGETDIR/later.txt")
+GITS_LIST+=("../later.txt::\$GITS_TARGETDIR/later.txt")
 EEE
 gits push --yes > /dev/null 2>&1 || fail "push of the new element from the first machine failed"
 cd ../two
