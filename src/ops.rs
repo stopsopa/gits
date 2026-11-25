@@ -544,7 +544,7 @@ fn changed_files(storage: &Storage, project: &Project) {
     }
     println!("\nchanged files:");
     for entry in files {
-        println!("  {}", entry.source.display());
+        println!("  {}", crate::util::blue(&entry.source.display().to_string()));
     }
     println!();
 }

@@ -51,6 +51,15 @@ pub fn yellow(text: &str) -> String {
     paint("33", text)
 }
 
+// For paths meant to be clicked: only when a person sits at the terminal (stdin is a terminal too).
+pub fn blue(text: &str) -> String {
+    if std::io::stdin().is_terminal() {
+        paint("34", text)
+    } else {
+        text.to_string()
+    }
+}
+
 pub fn home() -> Option<PathBuf> {
     match std::env::var_os("HOME") {
         Some(h) if !h.is_empty() => Some(PathBuf::from(h)),

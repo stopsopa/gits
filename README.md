@@ -132,7 +132,8 @@ gits isinsync      # no output, only the exit code: 0 in sync, 1 not in sync, 2 
 ```
 
 `gits diff` ends with the list of the local files which differ, with absolute paths (in the
-terminal of an editor a path can be clicked), and the address of the project in the storage.
+terminal of an editor a path can be clicked; in a terminal they are blue), and the address of
+the project in the storage.
 
 ## 4. Another machine: init and pull
 

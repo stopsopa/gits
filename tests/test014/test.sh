@@ -367,3 +367,20 @@ ${L0}"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "add --yes is refused"
+
+# gits diff, the block "changed files": in a terminal (stdin and stdout) the paths are blue,
+# so they stand out as the links they are. Blue is ESC[34m.
+# Exit code 1: diff says "not in sync" (nothing was pushed here).
+config
+COMMAND='python3 "${_ROOT}/tests/terminal.py" "" "${BIN}" diff 2>&1 | grep -c "^  $(printf "\033")\[34m/.*/\.git/gits\.sh$(printf "\033")\[0m"'
+EXPECTED_STDOUT="1"
+EXPECTED_STDERR=""
+EXPECTED_CODE="1"
+test "diff in a terminal: changed files in blue"
+
+# stdin is not a terminal (stdout still is): no blue
+COMMAND='python3 "${_ROOT}/tests/terminal.py" "" /bin/bash -c "echo \"\" | \"\${BIN}\" diff" 2>&1 | tr -d "\r" | grep -c "^  /.*/\.git/gits\.sh\$"'
+EXPECTED_STDOUT="1"
+EXPECTED_STDERR=""
+EXPECTED_CODE="1"
+test "diff with stdin from a pipe: changed files without color"
