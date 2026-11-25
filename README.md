@@ -204,6 +204,7 @@ In a directory with many projects (`~/Workspace`):
 ```sh
 gits state         # every project below the current directory: in sync or not
 gits find          # only the list of them
+gits list          # the same list with absolute paths, for other scripts
 ```
 
 For every project `state` prints `cd "<project>"` and `gits diff`, ready to paste into another
@@ -361,6 +362,7 @@ In any directory:
 | --- | --- |
 | `gits state` | finds all projects below the current directory and says for each whether it is in sync. For each it prints `cd "<project>"` and `gits diff`, ready to paste. Exit code 1 when anything is not in sync |
 | `gits find` | only lists the directories of those projects, one per line (`.` or `./path`) |
+| `gits list [--mode <variable>]` | the same projects with absolute paths, one per line and nothing else: `gits list \| /bin/bash script.sh`. Works without `GITS_SOURCE`, runs no lifecycle scripts besides the search. `--mode` is the name of the variable whose script does the search: `GITS_STATE_FIND` (default, the search of `gits state`), `GITS_FIND_FIND`, `GITS_MIGRATE_FIND`; when it is not defined the built-in search is used |
 | `gits migrate all` | `.git/gitstorage-config.sh` -> `.git/gits.sh` in all of them |
 | `gits events` | every lifecycle event of every command and which ones have a script now. `gits events --examples <directory>` writes an example script of each |
 

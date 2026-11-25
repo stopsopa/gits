@@ -167,6 +167,65 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "find in a project: the project in the current directory is '.'"
 
+# ---------- list ----------
+
+# list: the same projects as find (the ones state visits), but with absolute paths and nothing
+# else on stdout or stderr: it is made for pipes.
+REAL="$(pwd -P)"
+COMMAND='gits list'
+EXPECTED_STDOUT="${REAL}/a
+${REAL}/b/b
+${REAL}/c
+${REAL}/legacy"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "list"
+
+# what it is for: every line is a directory another script can enter
+COMMAND='gits list | while IFS= read -r D; do (cd "${D}" && basename "$(pwd)"); done | tr "\n" " "'
+EXPECTED_STDOUT="a b c legacy "
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "list through a pipe"
+
+# list only searches, the storage is not needed
+COMMAND='env -u GITS_SOURCE "${BIN}" list | wc -l | tr -d " "'
+EXPECTED_STDOUT="4"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "list without GITS_SOURCE"
+
+# --mode: the name of the variable whose script does the search. This script finds only "c".
+# It is in GITS_FIND_FIND: the default mode (GITS_STATE_FIND, not defined) doesn't see it and
+# uses the built-in search.
+cat <<'EEE' > "${WORK}/only-c.sh"
+echo "./c/.git/gits.sh"
+EEE
+COMMAND='GITS_FIND_FIND="${WORK}/only-c.sh" gits list --mode GITS_FIND_FIND; GITS_FIND_FIND="${WORK}/only-c.sh" gits list | wc -l | tr -d " "'
+EXPECTED_STDOUT="${REAL}/c
+4"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "list --mode: the search of another variable"
+
+# the default named explicitly, with its own script
+COMMAND='GITS_STATE_FIND="${WORK}/only-c.sh" gits list; GITS_STATE_FIND="${WORK}/only-c.sh" gits list --mode GITS_STATE_FIND'
+EXPECTED_STDOUT="${REAL}/c
+${REAL}/c"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "list: GITS_STATE_FIND is the default mode"
+
+# a name which is not a variable of the search: an error which lists the possible ones
+COMMAND='gits list --mode GITS_PUSH_START 2>&1 | has "not a variable of the search" "GITS_STATE_FIND (default)" "GITS_FIND_FIND" "GITS_MIGRATE_FIND"'
+EXPECTED_STDOUT="not a variable of the search
+GITS_STATE_FIND (default)
+GITS_FIND_FIND
+GITS_MIGRATE_FIND"
+EXPECTED_STDERR=""
+EXPECTED_CODE="1"
+test "list --mode: unknown variable"
+
 # ---------- state ----------
 
 # state for the whole workspace. Its output (stdout and stderr together) goes to ${LOG} for the

@@ -597,6 +597,79 @@ pub fn find(ctx: &Ctx) -> Result<i32, String> {
     Ok(0)
 }
 
+pub const LIST_MODE_DEFAULT: &str = "GITS_STATE_FIND";
+
+// the variables which can replace the search of projects: GITS_STATE_FIND, GITS_FIND_FIND, ...
+pub fn list_modes() -> Vec<String> {
+    events::variables()
+        .into_iter()
+        .filter(|(_, replaceable)| *replaceable)
+        .map(|(name, _)| name)
+        .collect()
+}
+
+/**
+ * gits list [--mode VARIABLE]
+ *
+ * The projects "gits state" would visit, absolute paths, one per line and nothing else on stdout:
+ * made for pipes (gits list | /bin/bash script.sh). Doesn't need the storage.
+ *
+ * --mode: the name of the variable whose script does the search (default GITS_STATE_FIND, the
+ * one of "gits state"). When that variable is not defined: the built-in search.
+ * It is the only event here: no START, FOUND, END, no *_ALL.
+ */
+pub fn list(cwd: &Path, args: &[String]) -> Result<i32, String> {
+    let modes = list_modes();
+    let allowed = || {
+        modes
+            .iter()
+            .map(|m| {
+                if m == LIST_MODE_DEFAULT {
+                    format!("  {m} (default)")
+                } else {
+                    format!("  {m}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let mode = match args {
+        [] => LIST_MODE_DEFAULT.to_string(),
+        [flag, value] if flag == "--mode" => value.clone(),
+        [flag] if flag == "--mode" => {
+            return Err(format!(
+                "gits list --mode needs the name of a variable, one of:\n{}",
+                allowed()
+            ))
+        }
+        _ => {
+            return Err(format!(
+                "gits list takes only --mode <variable>, got >{}<, see: gits --help",
+                args.join(" ")
+            ))
+        }
+    };
+    if !modes.contains(&mode) {
+        return Err(format!(
+            "gits list --mode >{mode}<: not a variable of the search, one of:\n{}",
+            allowed()
+        ));
+    }
+    // GITS_STATE_FIND -> state: the search runs as the search of that command
+    let command = mode
+        .trim_start_matches("GITS_")
+        .trim_end_matches("_FIND")
+        .to_lowercase();
+    events::init(&command, cwd, args);
+
+    for project in config::search(cwd)? {
+        let dir = cwd.join(&project.dir);
+        let dir = fs::canonicalize(&dir).unwrap_or(dir);
+        println!("{}", dir.display());
+    }
+    Ok(0)
+}
+
 fn storage_note() {
     println!(
         "{}",

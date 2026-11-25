@@ -31,6 +31,7 @@ GREEN=$'\033[32m'
 YELLOW=$'\033[33m'
 CYAN=$'\033[36m'
 BOLD=$'\033[1m'
+REVERSE=$'\033[7m'
 RESET=$'\033[0m'
 
 MODE="${1}"
@@ -187,8 +188,17 @@ if ! grep -q "^## ${NEW_TAG}\$" "${_DIR}/changelog.md" 2> /dev/null; then
   echo "${YELLOW}warning: no section '## ${NEW_TAG}' in changelog.md, release page will have no description of changes${RESET}"
 fi
 
+# What is about to happen on its own lines, and below it a separate line in reverse colors
+# which stays at the bottom with the cursor: it is visible that the script waits for a key.
+cat <<EEE
+
+${BOLD}About to create and push tag:${RESET} ${GREEN}${BOLD}${NEW_TAG}${RESET}
+${GRAY}(the pushed tag starts the release)${RESET}
+
+EEE
+
 # Ctrl+D (end of input) must not be treated as Enter
-read -r -p "Press Enter to create and push tag '${NEW_TAG}', or Ctrl+C to abort..." || {
+read -r -p "${REVERSE}${YELLOW}${BOLD} WAITING ${RESET} ${YELLOW}press ${BOLD}Enter${RESET}${YELLOW} to continue, ${BOLD}Ctrl+C${RESET}${YELLOW} to abort:${RESET} " || {
   echo ""
   echo "${0} error: aborted"
   exit 1

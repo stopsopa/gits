@@ -266,6 +266,18 @@ fn env_table() -> String {
 }
 
 fn help() -> String {
+    #[allow(non_snake_case)]
+    let LIST_MODES: String = commands::list_modes()
+        .iter()
+        .map(|mode| {
+            let default = if mode == commands::LIST_MODE_DEFAULT {
+                "   (default: the search of gits state)"
+            } else {
+                ""
+            };
+            format!("                          {mode}{default}\n")
+        })
+        .collect();
     let mut out = format!(
         r#"
 gits {VERSION}
@@ -289,7 +301,13 @@ In any directory:
                         and say for each whether its files are in sync with the storage.
                         Prints 'cd "<project>"' + 'gits diff' for each, ready to paste.
   gits find             only list the directories of those projects, one per line
-  gits migrate all      .git/gitstorage-config.sh -> .git/gits.sh in all projects below the current directory
+  gits list             the same projects with absolute paths, one per line and nothing else,
+                        for pipes: gits list | /bin/bash script.sh
+                        Works without GITS_SOURCE. Runs no lifecycle scripts besides the search.
+  gits list --mode <variable>
+                        which variable provides the script of the search (not defined: the
+                        built-in search, events/defaults/FIND.sh):
+{LIST_MODES}  gits migrate all      .git/gitstorage-config.sh -> .git/gits.sh in all projects below the current directory
 
 In the root of a project (the directory with .git):
 
@@ -410,6 +428,18 @@ fn run() -> i32 {
         }
         "events" => {
             return match events::run(&args[1..]) {
+                Ok(code) => code,
+                Err(e) => {
+                    eprintln!("{}", red(&format!("gits error: {e}")));
+                    1
+                }
+            };
+        }
+        "list" => {
+            let result = std::env::current_dir()
+                .map_err(|e| format!("can't read current directory: {e}"))
+                .and_then(|cwd| commands::list(&cwd, &args[1..]));
+            return match result {
                 Ok(code) => code,
                 Err(e) => {
                     eprintln!("{}", red(&format!("gits error: {e}")));

@@ -16,7 +16,7 @@
 # test001   --help, --version, GITS_SOURCE is required
 # test002   init, diff, isinsync, push
 # test003   init (restore from the storage), pull
-# test004   state, find
+# test004   state, find, list
 # test005   migrate, migrate all, automatic migration
 # test006   add
 # test007   encrypted elements (SOURCE:e:TARGET) through GITS_ENCRYPTION_SOCKET,

@@ -413,8 +413,7 @@ impl Found {
  * that file in it counts. Sorted, each project once. Then the event FOUND.
  */
 pub fn find(base: &Path) -> Result<Vec<Found>, String> {
-    let printed = events::replace("FIND", events::DEFAULT_FIND, &[base.display().to_string()])?;
-    let found = parse_found(&printed, base);
+    let found = search(base)?;
 
     let list: Vec<&str> = found.iter().map(|f| f.dir.as_str()).collect();
     events::fire(
@@ -426,6 +425,12 @@ pub fn find(base: &Path) -> Result<Vec<Found>, String> {
         ],
     )?;
     Ok(found)
+}
+
+// only the search (the event FIND), without the event FOUND: "gits list"
+pub fn search(base: &Path) -> Result<Vec<Found>, String> {
+    let printed = events::replace("FIND", events::DEFAULT_FIND, &[base.display().to_string()])?;
+    Ok(parse_found(&printed, base))
 }
 
 // lines ".../.git/gits.sh" and ".../.git/gitstorage-config.sh" -> projects
