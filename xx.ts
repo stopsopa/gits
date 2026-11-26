@@ -35,15 +35,18 @@ IFS= read -r -n1 k 2>/dev/null||IFS= read -r k;stty "$old"
 [ "$k" = "$(printf '\\033')" ]&&exit 0;`;
 
 type Command = {
-  // shell script, written to xx_generated.sh and executed with /bin/bash
+  // required. Shell script, written to xx_generated.sh and executed with /bin/bash
   command: string;
-  // shown under the menu for selected row. Default: name of the command
+  // default: name of the command. Shown under the menu for the selected row
   description?: string;
-  // default true: ask "Run command?" before running
+  // default: false = run straight away
+  // true = ask "Run command?" first (XX_CONFIRM=false skips the question)
   confirm?: boolean;
-  // default false. true = run in the current shell (source) instead of /bin/bash
+  // default: false = executed with /bin/bash as a separate process
+  // true = sourced in the current shell (cd, export, source venv/bin/activate stay after it ends)
   source?: boolean;
-  // lower goes first. Missing means 0, so negative = top, positive = bottom
+  // default: 0. Lower goes first: negative = top, positive = bottom
+  // commands with the same order stay in the order of this file
   order?: number;
 };
 
@@ -57,6 +60,9 @@ type Ctx = {
   // path of this file
   configPath: string;
 };
+
+// directory with the scripts managing the submodules, relative to the root of the project
+const SUBMODULES = `bash/git/submodules`;
 
 export default (setup: Commands, ctx: Ctx): Commands => {
   return {
@@ -90,8 +96,12 @@ cat <<EEE
   xx "submodule add"       once, ever        register the submodules and commit the result
   xx "submodule install"   once per clone    download the submodules at the pinned commits
   xx "submodule update"    when you want     move the pins to the newest commit of the tracked branches
+  xx "submodule reset"     when dirty        discard local changes in the submodules and go back to the pinned commits
+                                             (one only: xx "submodule reset" submodules/encrypt)
   xx "submodule delete"    rarely            remove one submodule completely: xx "submodule delete" submodules/encrypt
-  xx "submodule status"    anytime           where the pins are and how far behind the branches
+  xx "submodule status"    anytime          where the pins are and how far behind the branches
+
+  The scripts behind them: ${SUBMODULES}/*.sh, each has the instruction at its top.
 
 EEE
 `,
@@ -107,6 +117,7 @@ EEE
     | `xx "submodule add"` | once, ever | `git submodule add -b main … submodules/encrypt` `-b master … submodules/stopsopa.github.io` and `-b main … submodules/xx`; skips any already in `.gitmodules` |
     | `xx "submodule install"` | once per clone | `git submodule update --init --recursive`, plus `git config submodule.recurse true` |
     | `xx "submodule update"` | when you want newer code | `git submodule update --init --remote`, then lists the commits that came in |
+    | `xx "submodule reset" [path]` | when a submodule is dirty | lists what would be lost, waits for Enter, then `git submodule update --init --recursive --force`; untracked files are left alone |
     | `xx "submodule delete" <path>` | rarely | `git submodule deinit -f <path>`, `git rm -f <path>`, `rm -rf .git/modules/<name>`; refuses when the submodule has uncommitted changes or unpushed commits |
     | `xx "submodule status"` | anytime | per submodule: branch, current commit, newest remote commit, how far behind, uncommitted files |
 
@@ -140,40 +151,17 @@ EEE
     - **Detached HEAD**: after install or update, a submodule sits on a commit, not a branch. To work inside one, run `git switch main` (or `master`) there first, commit and push there, then commit the new pin in the parent.
     - **Push order**: push the submodule before the parent, otherwise the parent pins a commit nobody else can fetch.
     - **Dirty parent**: `git status` in the parent showing `modified: submodules/encrypt (new commits)` just means the submodule is on a different commit than the pin. Either commit it (a bump) or run `xx "submodule install"` to go back to the pin.
+    - **Dirty submodule**: `modified: submodules/xx (modified content)` means files inside the submodule were edited and not committed there. The parent can't commit that, and `xx "submodule update"` fails on it ("local changes would be overwritten by checkout"). Either commit inside the submodule, or throw the edits away with `xx "submodule reset"`.
     */
     [`submodule add`]: {
       command: `
 set -e
 
-if git config -f .gitmodules --get submodule.encrypt.url > /dev/null 2>&1; then
-  echo "encrypt: already registered in .gitmodules, skipping"
-else
-  git submodule add -b main --name encrypt git@github.com:stopsopa/encrypt.git submodules/encrypt
-fi
-
-if git config -f .gitmodules --get submodule.stopsopa.github.io.url > /dev/null 2>&1; then
-  echo "stopsopa.github.io: already registered in .gitmodules, skipping"
-else
-  git submodule add -b master --name stopsopa.github.io git@github.com:stopsopa/stopsopa.github.io.git submodules/stopsopa.github.io
-fi
-
-if git config -f .gitmodules --get submodule.xx.url > /dev/null 2>&1; then
-  echo "xx: already registered in .gitmodules, skipping"
-else
-  git submodule add -b main --name xx git@github.com:stopsopa/xx.git submodules/xx
-fi
-
-echo ""
-git submodule status
-
-cat <<EEE
-
-.gitmodules and the pinned commits are staged. To finish, commit them:
-
-    git commit -m "add submodules"
-    git push
-
-EEE
+# list of the submodules of this project, one per line: <path> <url> <branch>
+/bin/bash ${SUBMODULES}/add.sh ${S}
+  submodules/encrypt            git@github.com:stopsopa/encrypt.git            main ${S}
+  submodules/stopsopa.github.io git@github.com:stopsopa/stopsopa.github.io.git master ${S}
+  submodules/xx                 git@github.com:stopsopa/xx.git                 main
 `,
       description: `one time: register encrypt (main), stopsopa.github.io (master) and xx (main) as submodules in ./submodules. Safe to run again`,
     },
@@ -181,98 +169,31 @@ EEE
       command: `
 set -e
 
-# from now on git pull / checkout / switch in this repository also move the submodules to the pinned commits
-git config submodule.recurse true
-
-git submodule update --init --recursive
-
-echo ""
-git submodule status
+/bin/bash ${SUBMODULES}/install.sh
 `,
       description: `after a fresh clone: download all submodules at the commits pinned by this repository`,
-      confirm: false,
     },
     [`submodule update`]: {
       command: `
 set -e
 
-git submodule update --init --remote
-
-echo ""
-git submodule status
-echo ""
-git --no-pager diff --submodule=log
-
-cat <<EEE
-
-If commits are listed above, the pins moved. Record that in this repository:
-
-    git add submodules
-    git commit -m "bump submodules"
-    git push
-
-EEE
+/bin/bash ${SUBMODULES}/update.sh
 `,
       description: `move every submodule to the newest commit of its tracked branch (branch is in .gitmodules). Commit afterwards`,
+    },
+    [`submodule reset`]: {
+      command: `
+set -e
+
+/bin/bash ${SUBMODULES}/reset.sh "\$@"
+`,
+      description: `discard uncommitted changes in the submodules and put them back on the pinned commits (lists what will be lost and waits for Enter). Optional argument: path of one submodule, e.g. xx "submodule reset" submodules/xx`,
     },
     [`submodule delete`]: {
       command: `
 set -e
 
-P="\${1%/}"
-
-if [ -z "\${P}" ]; then
-  cat <<EEE
-
-usage: xx "submodule delete" <path of the submodule>
-
-registered submodules:
-\$(git config -f .gitmodules --get-regexp '^submodule\\..*\\.path\$' | awk '{print "    " \$2}')
-
-EEE
-  exit 1
-fi
-
-NAME="\$(git config -f .gitmodules --get-regexp '^submodule\\..*\\.path\$' | awk -v p="\${P}" '\$2 == p { sub(/^submodule\\./, "", \$1); sub(/\\.path\$/, "", \$1); print \$1 }')"
-
-if [ -z "\${NAME}" ]; then
-  echo "ERROR: >\${P}< is not a path of a submodule registered in .gitmodules"
-  exit 1
-fi
-
-# the local clone of the submodule is deleted too, so refuse to lose work which exists only here
-if [ -e "\${P}/.git" ]; then
-  if [ -n "\$(git -C "\${P}" status --porcelain)" ]; then
-    echo "ERROR: \${P} has uncommitted changes, commit or discard them first"
-    exit 1
-  fi
-  if [ -n "\$(git -C "\${P}" log --oneline HEAD --branches --not --remotes)" ]; then
-    echo "ERROR: \${P} has commits which were never pushed, push them first:"
-    git -C "\${P}" --no-pager log --oneline HEAD --branches --not --remotes
-    exit 1
-  fi
-fi
-
-# 1. .git/config entry + content of the directory
-git submodule deinit -f "\${P}"
-
-# 2. the directory, the pinned commit and the entry in .gitmodules (staged)
-git rm -f "\${P}"
-
-# 3. the local clone kept in .git/modules
-rm -rf "\$(git rev-parse --git-dir)/modules/\${NAME}"
-
-echo ""
-git status --short
-
-cat <<EEE
-
-Submodule \${P} is removed and the removal is staged. To finish, commit it:
-
-    git commit -m "remove submodule \${P}"
-    git push
-
-EEE
+/bin/bash ${SUBMODULES}/delete.sh "\$@"
 `,
       description: `remove one submodule completely. Argument: its path, e.g. xx "submodule delete" submodules/encrypt. Commit afterwards`,
     },
@@ -280,23 +201,9 @@ EEE
       command: `
 set -e
 
-git submodule status
-echo ""
-
-git submodule foreach --quiet '
-branch="\$(git config -f "\$toplevel/.gitmodules" --get "submodule.\$name.branch")"
-git fetch --quiet origin "\$branch"
-echo "\$name"
-echo "  branch      : \$(git symbolic-ref --short -q HEAD || echo "detached HEAD")"
-echo "  here        : \$(git log -1 --format="%h %cs %s" HEAD)"
-echo "  newest      : \$(git log -1 --format="%h %cs %s" "origin/\$branch")  (origin/\$branch)"
-echo "  behind by   : \$(git rev-list --count "HEAD..origin/\$branch") commit(s)"
-echo "  uncommitted : \$(git status --porcelain | wc -l | tr -d " ") file(s)"
-echo ""
-'
+/bin/bash ${SUBMODULES}/status.sh
 `,
       description: `pinned commit of every submodule and how far it is behind its tracked branch (fetches)`,
-      confirm: false,
     },
     [`compile`]: {
       command: `
