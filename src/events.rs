@@ -964,6 +964,88 @@ pub fn fire(event: &str, args: &[String], extra: &[(&str, String)]) -> Result<()
     Ok(())
 }
 
+pub const ENV_EXIT: &str = "GITS_EXIT";
+
+/**
+ * GITS_EXIT: a script which runs as the very last thing of EVERY start of gits, like
+ * `trap ... EXIT` of a shell: after a command which succeeded or failed, after Ctrl+C, SIGTERM and
+ * SIGHUP (not after kill -9: nothing can run then), also after --help, an unknown command or a
+ * command which has no lifecycle events. After the event END, when everything temporary is gone.
+ *
+ * Not one of the events of a command: only the environment defines it (not a config), *_ALL
+ * scripts are not called for it, it can't change the exit code, and its failure is a warning.
+ * Like every script: not run by a gits which was started from inside of a script.
+ *
+ *   $1 EXIT   $2 the command ("" when there was none)   $3 the exit code
+ */
+pub fn exit(command: &str, pwd: &Path, code: i32) {
+    if env(ENV_RUNNING).is_some() {
+        return;
+    }
+    let Some(script) = env(ENV_EXIT) else {
+        return;
+    };
+    let path = script_path(&script, pwd);
+    let problem = if !path.is_file() {
+        Some(format!("script >{}< doesn't exist", path.display()))
+    } else {
+        // what the events of the command knew (empty when the command has no events)
+        let context: Vec<(String, String)> = STATE
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|s| s.context.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default();
+        let mut options = Options::new().pwd(pwd).forward_stderr();
+        for (name, value) in &context {
+            options = options.env(name, value);
+        }
+        // stdout of gits can be data (isinsync, list, find): what the script prints goes to stderr
+        options = options
+            .env("GITS_EVENT", ENV_EXIT)
+            .env("GITS_EVENT_NAME", "EXIT")
+            .env("GITS_EVENT_COMMAND", command)
+            .env("GITS_EVENT_PWD", pwd)
+            .env("GITS_EVENT_EXIT_CODE", code.to_string())
+            .env("GITS_EVENT_CAN_STOP", "0")
+            .env("GITS_EVENT_TRIGGER", ENV_EXIT)
+            .env("GITS_EVENT_TRIGGER_FROM", "env")
+            .env("GITS_EVENT_SCRIPT", &path)
+            .env(ENV_RUNNING, "1")
+            .on_stdout(|chunk| {
+                let mut err = std::io::stderr();
+                let _ = err.write_all(chunk);
+                let _ = err.flush();
+            });
+        let shell = config::shell();
+        let all = [
+            path.display().to_string(),
+            "EXIT".to_string(),
+            command.to_string(),
+            code.to_string(),
+        ];
+        match cli(&shell, &all, options) {
+            Ok(out) if out.success() => None,
+            Ok(out) => Some(format!(
+                "script >{}< ended with {}",
+                path.display(),
+                out.status()
+            )),
+            Err(e) => Some(format!(
+                "can't run >{}< with shell {}=>{shell}<: {e}",
+                path.display(),
+                config::ENV_SHELL
+            )),
+        }
+    };
+    if let Some(problem) = problem {
+        eprintln!(
+            "{}",
+            yellow(&format!("gits warning: {ENV_EXIT}: {problem}"))
+        );
+    }
+}
+
 // for the places which can't stop anyway (cleanup, the end)
 pub fn fire_quietly(event: &str, args: &[String], extra: &[(&str, String)]) {
     if let Err(e) = fire(event, args, extra) {
@@ -1106,6 +1188,10 @@ pub fn table() -> String {
     };
     out.push_str(&format!("  {:<28} {}\n", "GITS_ALL", shown("GITS_ALL")));
     out.push_str("      every event of every command\n\n");
+    out.push_str(&format!("  {:<28} {}\n", ENV_EXIT, shown(ENV_EXIT)));
+    out.push_str(
+        "      not an event: the last thing of every start of gits, however it ends (like trap EXIT)\n\n",
+    );
 
     for (command, defs) in REGISTRY {
         let title = if *command == "update" {

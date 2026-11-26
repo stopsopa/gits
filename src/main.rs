@@ -200,6 +200,16 @@ fn env_rows() -> Vec<Row> {
         },
         false,
     ));
+    rows.push(Row::Var(
+        in_shell(events::ENV_EXIT),
+        "(none)".to_string(),
+        match util::env(events::ENV_EXIT) {
+            Some(_) if nested => format!("(ignored: {} is defined)", events::ENV_RUNNING),
+            Some(value) => util::expand_tilde(&value).display().to_string(),
+            None => "(no script)".to_string(),
+        },
+        false,
+    ));
     for (name, replaceable) in events::variables() {
         let default = if replaceable {
             "built-in: events/defaults/FIND.sh"
@@ -361,6 +371,10 @@ Lifecycle events: your scripts run between the stages of every command (see LIFE
   gits events --examples <directory>
                            write an example script of every event (with everything it gets
                            documented at its top) into the directory
+
+  GITS_EXIT=<script>       not an event of a command: the script runs as the last thing of
+                           every start of gits (also after an error, Ctrl+C, kill; not kill -9),
+                           like "trap ... EXIT" of a shell. $1 EXIT, $2 command, $3 exit code
 
 Environment variables:
 
@@ -532,6 +546,20 @@ fn main() {
     util::install_signal_handlers();
     // run() has returned: everything temporary is already removed
     let code = run();
+    // like "trap ... EXIT": whatever was started and however it ended
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let command = match args.first().map(|s| s.as_str()) {
+        Some("--update") => "update".to_string(),
+        _ => args
+            .iter()
+            .find(|a| !a.starts_with('-'))
+            .cloned()
+            .unwrap_or_default(),
+    };
+    if let Ok(cwd) = std::env::current_dir() {
+        let code = if util::interrupted() { 130 } else { code };
+        events::exit(&command, &cwd, code);
+    }
     if util::interrupted() {
         eprintln!("{}", yellow("gits: interrupted"));
         std::process::exit(130);

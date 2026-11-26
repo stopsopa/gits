@@ -486,12 +486,12 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "gits events: the list, the defined ones with their value"
 
-# it needs neither the storage nor a project
+# it needs neither the storage nor a project. 133 variables of events and GITS_EXIT
 COMMAND='(unset GITS_SOURCE; cd / && "${BIN}" events | grep -c "^  GITS_")'
-EXPECTED_STDOUT="133"
+EXPECTED_STDOUT="134"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
-test "gits events works without GITS_SOURCE: 133 variables"
+test "gits events works without GITS_SOURCE: 134 variables"
 
 # events/examples/ in the repository is generated: it has to be what the binary writes
 COMMAND='gits events --examples "${WORK}/examples" && diff -r "${WORK}/examples" "${_ROOT}/events/examples" && ls "${WORK}/examples" | wc -l | tr -d " "'
@@ -521,3 +521,71 @@ EXPECTED_STDOUT="usage: gits events"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "gits events with an unknown argument"
+
+# ---------- GITS_EXIT: the last thing of every start of gits ----------
+
+# Not an event of a command: one variable, and its script runs however gits ends.
+# It gets: $1 EXIT, $2 the command, $3 the exit code.
+cat <<'EEE' > "${WORK}/scripts/exit.sh"
+echo "exit script: >${1}< >${2}< >${3}< ${GITS_EVENT} ${GITS_EVENT_EXIT_CODE}" >> "${LOG}"
+echo "printed by the exit script"
+EEE
+export GITS_EXIT="${WORK}/scripts/exit.sh"
+
+# after a command which worked: after its END, and what the script prints goes to stderr
+# (stdout of gits can be data, here the url)
+rm -f "${LOG}"
+COMMAND='cd repo && GITS_URL_END="${WORK}/scripts/log.sh" gits url 2>&1 > /dev/null; cat "${LOG}"'
+EXPECTED_STDOUT="printed by the exit script
+GITS_URL_END (env)
+exit script: >EXIT< >url< >0< GITS_EXIT 0"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_EXIT: after END, its output on stderr"
+
+# after a command which failed, with its exit code; the exit code of gits stays
+rm -f "${LOG}"
+COMMAND='cd plain && gits diff > /dev/null 2>&1; echo "code ${?}"; cat "${LOG}"'
+EXPECTED_STDOUT="code 1
+exit script: >EXIT< >diff< >1< GITS_EXIT 1"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_EXIT: after an error"
+
+# also where no command has events: --help, list, an unknown command, an unsupported flag
+rm -f "${LOG}"
+COMMAND='gits --help > /dev/null 2>&1; gits list > /dev/null 2>&1; gits nonsense > /dev/null 2>&1; gits diff --what > /dev/null 2>&1; cat "${LOG}"'
+EXPECTED_STDOUT="exit script: >EXIT< >< >0< GITS_EXIT 0
+exit script: >EXIT< >list< >0< GITS_EXIT 0
+exit script: >EXIT< >nonsense< >1< GITS_EXIT 1
+exit script: >EXIT< >diff< >1< GITS_EXIT 1"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_EXIT: --help, list, unknown command, unsupported flag"
+
+# a script which fails or doesn't exist is a warning, the exit code of gits is not changed
+COMMAND='cd repo && GITS_EXIT="${WORK}/scripts/fail.sh" gits url 2>&1 > /dev/null | has "gits warning: GITS_EXIT: script >${WORK}/scripts/fail.sh< ended with exit code 7"; echo "code ${PIPESTATUS[0]}"; GITS_EXIT="/no/such.sh" gits url 2>&1 > /dev/null | has "gits warning: GITS_EXIT: script >/no/such.sh< doesn'"'"'t exist"'
+EXPECTED_STDOUT="gits warning: GITS_EXIT: script >${WORK}/scripts/fail.sh< ended with exit code 7
+code 0
+gits warning: GITS_EXIT: script >/no/such.sh< doesn't exist"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_EXIT: a failing or missing script is a warning"
+
+# gits started from inside of a script doesn't run it: one line, of the outer gits
+rm -f "${LOG}"
+COMMAND='cd repo && GITS_URL_END="${WORK}/scripts/nested.sh" gits url > /dev/null 2>&1; grep -c "exit script" "${LOG}"'
+EXPECTED_STDOUT="1"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_EXIT: not run by a nested gits"
+
+# listed by gits events and by the table of --help
+COMMAND='gits events 2> /dev/null | grep "^  GITS_EXIT " | tr -s " "; gits --help 2> /dev/null | grep "^  GITS_EXIT=\"" | tr -s " "'
+EXPECTED_STDOUT=" GITS_EXIT ${WORK}/scripts/exit.sh
+ GITS_EXIT=\"${WORK}/scripts/exit.sh\" | (none) | ${WORK}/scripts/exit.sh"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_EXIT: in gits events and in --help"
+
+unset GITS_EXIT

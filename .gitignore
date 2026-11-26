@@ -7,3 +7,7 @@
 
 # examples/SUMMARY.md: everything its commands create
 /s/
+
+# examples/ENCRYPT_PROCESS.md: everything its scripts create
+/examples/tmp/
+/examples/server.log

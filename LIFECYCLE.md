@@ -176,6 +176,33 @@ export GITS_FIND_FIND="~/.gits/events/find.sh"
 - `GITS_<COMMAND>_ALL` and `GITS_ALL` are not called for a replaceable event (they could not do
   its work), but the event is counted in `GITS_EVENT_SEQ`.
 
+## GITS_EXIT: always at the end
+
+`GITS_EXIT` is the path of one more script. It is **not an event of a command**: it runs as
+the very last thing of **every** start of gits, like `trap ... EXIT` of a shell.
+
+```sh
+export GITS_EXIT="~/.gits/events/exit.sh"
+```
+
+| | |
+|---|---|
+| when | after a command which succeeded or failed, after Ctrl+C (SIGINT), `kill` (SIGTERM), a closed terminal (SIGHUP). Also for `--help`, `--version`, `events`, `list`, an unknown command. Not after `kill -9`: nothing can run then |
+| order | after `END`, after the cleanup: the temporary clone is already removed |
+| arguments | `$1` `EXIT`, `$2` the command (empty when there was none), `$3` the exit code of gits |
+| env vars | `GITS_EVENT=GITS_EXIT`, `GITS_EVENT_NAME=EXIT`, `GITS_EVENT_COMMAND`, `GITS_EVENT_EXIT_CODE`, `GITS_EVENT_PWD`, `GITS_EVENT_SCRIPT`, and what the command knew when it has events (`GITS_SOURCE`, `GITS_EVENT_ARGS`, ...) |
+| output | what the script prints goes to stderr of gits (stdout of gits can be data: `list`, `find`, `isinsync`) |
+| can't | change the exit code of gits. A script which fails or doesn't exist is a warning |
+| defined | only in the environment, not in a config. `GITS_ALL` and `GITS_<COMMAND>_ALL` are not called for it, there is no `GITS_<COMMAND>_EXIT` |
+| nested | like every script: not run by a gits started from inside of a script |
+
+How it differs from `END`: `END` belongs to a command (`GITS_PUSH_END`, or all of them through
+`GITS_ALL`), `GITS_EXIT` is one variable for everything, also for what has no events.
+
+The pair `START` + `GITS_EXIT` is the way to have something running exactly as long as gits:
+[examples/ENCRYPT_PROCESS.md](examples/ENCRYPT_PROCESS.md) starts an encryption server at `START`,
+tests it, and stops it in `GITS_EXIT`.
+
 ## The lifecycle of every command
 
 How to read the graphs: top to bottom is time. `[ ... ]` is a stage of gits, a name on its own

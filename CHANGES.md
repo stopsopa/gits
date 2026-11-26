@@ -291,3 +291,25 @@ directory instead:
   local commits with decrypted files can stay in `.git` of the kept clone until git collects them
 - `gits --help` lists it: 7 variables of gits itself now
 - code: `src/ops.rs` (`Temp`, `Storage::clone`, `restore`), tests: `tests/test015`
+
+# GITS_EXIT: a script which always runs at the end
+
+Not in the original. `GITS_EXIT=<script>`: the last thing of every start of gits, like
+`trap ... EXIT` of a shell.
+
+- after success, error, Ctrl+C, `kill` (SIGTERM), a closed terminal (SIGHUP, handled from now on
+  like the other two: cleanup first). Not `kill -9`
+- also for `--help`, `--version`, `events`, `list`, an unknown command
+- after `END` and after the cleanup. `$1` `EXIT`, `$2` the command, `$3` the exit code
+- not an event of a command: only from the environment, no `*_ALL`, can't change the exit code,
+  a failing script is a warning, its output goes to stderr. Not run by a nested gits
+- listed by `gits --help` (table of env vars) and `gits events`
+- code: `src/events.rs` (`exit`), `src/main.rs`; tests: `tests/test013`, `tests/test010` (after Ctrl+C)
+
+# examples/ENCRYPT_PROCESS.md
+
+A self-contained demo of encryption which lives exactly as long as one gits command:
+`examples/gits.sh` (wrapper) registers `examples/start.sh` for `START` (through `GITS_ALL`) and
+`examples/stop.sh` in `GITS_EXIT`. `start.sh` starts an ssh-agent of its own with the demo key
+and `examples/server.ts` (the simplest server of the socket protocol) and tests the encryption
+through the socket before gits goes on. All variables: `examples/env.sh`, the key: `examples/keys.sh`.

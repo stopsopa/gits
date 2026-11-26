@@ -21,6 +21,10 @@ GITS_ALL="~/.gits/events/script.sh"
     lifecycle scripts, in the environment or in .git/gits.sh
     see LIFECYCLE.md, list of all of them: gits events
 
+GITS_EXIT="~/.gits/events/exit.sh"
+    script which runs as the last thing of every start of gits, however it ends
+    (like trap EXIT of a shell), only from the environment. See LIFECYCLE.md
+
 All of the above are given to every lifecycle script (the first five with the values gits uses),
 together with GITS_EVENT_* - see LIFECYCLE.md, chapter Reference.
 

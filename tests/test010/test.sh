@@ -93,8 +93,13 @@ LOG="${WORK}/state.log"
 # it gits would be in the group of this test and the signal below would hit the test too.
 # PID is the pid of the background job, which is also the id of its group ("gits" is a
 # function of tests/_lib.sh, so the job is a subshell and the binary is its child, in the same group).
+# GITS_EXIT: the script which runs as the last thing of every start of gits, also an interrupted
+# one. It writes what it was told into a file, the last check reads it.
+cat <<EEE > "${WORK}/exit.sh"
+echo "\${1} \${2} \${3} \${GITS_EVENT_EXIT_CODE}, names in ws: \$(ls -A | wc -l | tr -d " ")" > "${WORK}/exit.txt"
+EEE
 set -m
-gits state > "${LOG}" 2>&1 &
+GITS_EXIT="${WORK}/exit.sh" gits state > "${LOG}" 2>&1 &
 PID="${!}"
 set +m
 # where the output of state is, to look at it by hand after the test
@@ -156,3 +161,11 @@ gits: interrupted"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "output after Ctrl+C: cleaning, interrupted, the rest of the projects is not processed"
+
+# The script of GITS_EXIT ran although gits was interrupted: it got EXIT, the command and the
+# exit code (130), and it ran after the cleanup: only the three projects were in the directory.
+COMMAND='cat "${WORK}/exit.txt"'
+EXPECTED_STDOUT="EXIT state 130 130, names in ws: 3"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_EXIT runs after Ctrl+C, after the cleanup"

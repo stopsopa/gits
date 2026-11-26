@@ -20,6 +20,8 @@ pub fn install_signal_handlers() {
     unsafe {
         libc::signal(libc::SIGINT, handler);
         libc::signal(libc::SIGTERM, handler);
+        // the terminal was closed: the same way out (cleanup, GITS_EXIT)
+        libc::signal(libc::SIGHUP, handler);
     }
 }
 

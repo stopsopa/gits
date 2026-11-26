@@ -92,6 +92,7 @@ unset NO_COLOR
 # lifecycle scripts of the developer (GITS_ALL, GITS_<COMMAND>_<EVENT>) must not run in a test.
 # The names of the commands are enough: every such variable starts with GITS_<COMMAND>_
 unset GITS_ALL
+unset GITS_EXIT
 for _LIB_NAME in $(env | grep -E '^GITS_(STATE|FIND|INIT|ADD|DIFF|ISINSYNC|PUSH|PULL|URL|MOVE|MIGRATE|UPDATE)_' | cut -d = -f 1); do
   unset "${_LIB_NAME}"
 done
