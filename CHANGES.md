@@ -352,11 +352,11 @@ The design and the decisions: `examples/encrypt/ENCRYPT_IN_GITS_PLAN.md`.
   `--storage`. `--yes` required to change anything, `--rewrap-only` for rekey. One clone, one
   commit, one push; a failed request changes nothing in the storage
 - **socket protocol**: two new requests, `rekey "<in>" "<out>"` and `rewrap "<in>" "<out>"`
-  (`src/socket.rs`). Answered by `examples/encrypt/server.ts` when `GITS_DEMO_NEW_SSH_KEY` is
+  (`src/socket.rs`). Answered by `examples/encrypt/server.ts` when `GITS_ENCRYPTION_REKEY_SSH_KEY` is
   defined; not by `submodules/encrypt/examples/socket/server.ts` (not changed)
 - `AUTH` from the encoder process is explained: the file is stored with another key
 - lifecycle: command `crypt` with 14 events (`GITS_CRYPT_*`), 148 event variables in total
-- demo: two keys (`key`, `key2`), `GITS_DEMO_NEW_SSH_KEY`, an empty `GITS_ENCRYPTION_SOCKET` for the wrapper (no socket),
+- demo: two keys (`key`, `key2`), `GITS_ENCRYPTION_REKEY_SSH_KEY`, an empty `GITS_ENCRYPTION_SOCKET` for the wrapper (no socket),
   `GITS_DEMO_WORK`, a binary file in `repob`, mode `auto` (the library decides lines / blob),
   steps 6 and 7 of `ENCRYPT_PROCESS.md`
 - test: `tests/test016` (runs the demo in `tests/test016/tmp/demo`)

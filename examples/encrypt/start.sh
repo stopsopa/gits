@@ -2,7 +2,7 @@
 # Starts what gits needs to encrypt and decrypt (demo examples/encrypt/ENCRYPT_PROCESS.md), and ends
 # only when it works:
 #
-#   1. an ssh-agent of its own, with the key ${GITS_DEMO_SSH_KEY} loaded (your agent is not touched)
+#   1. an ssh-agent of its own, with the key ${GITS_ENCRYPTION_SSH_KEY} loaded (your agent is not touched)
 #   2. the server examples/encrypt/server.js on the socket ${GITS_ENCRYPTION_SOCKET}
 #   3. a test through that socket: a file is encrypted, decrypted and compared
 #
@@ -36,8 +36,8 @@ source "${_DIR}/env.sh"
 # whatever a previous run left: start from nothing
 /bin/bash "${_DIR}/stop.sh"
 
-if [[ ! -f "${GITS_DEMO_SSH_KEY}" ]]; then
-  echo "${0} error: no key GITS_DEMO_SSH_KEY=>${GITS_DEMO_SSH_KEY}<, create it: /bin/bash ${_DIR}/keys.sh"
+if [[ ! -f "${GITS_ENCRYPTION_SSH_KEY}" ]]; then
+  echo "${0} error: no key GITS_ENCRYPTION_SSH_KEY=>${GITS_ENCRYPTION_SSH_KEY}<, create it: /bin/bash ${_DIR}/keys.sh"
   exit 1
 fi
 
@@ -48,15 +48,15 @@ mkdir -p "${GITS_DEMO_TMP}"
 eval "$(ssh-agent -a "${GITS_DEMO_AGENT}")" > /dev/null
 echo "${SSH_AGENT_PID}" > "${GITS_DEMO_TMP}/agent.pid"
 
-ssh-add -q "${GITS_DEMO_SSH_KEY}" || {
-  echo "${0} error: ssh-add failed for GITS_DEMO_SSH_KEY=>${GITS_DEMO_SSH_KEY}<"
+ssh-add -q "${GITS_ENCRYPTION_SSH_KEY}" || {
+  echo "${0} error: ssh-add failed for GITS_ENCRYPTION_SSH_KEY=>${GITS_ENCRYPTION_SSH_KEY}<"
   exit 1
 }
 
 # rotation (gits crypt rekey): the key the files get has to be in the agent too
-if [[ -n "${GITS_DEMO_NEW_SSH_KEY}" ]]; then
-  ssh-add -q "${GITS_DEMO_NEW_SSH_KEY}" || {
-    echo "${0} error: ssh-add failed for GITS_DEMO_NEW_SSH_KEY=>${GITS_DEMO_NEW_SSH_KEY}<"
+if [[ -n "${GITS_ENCRYPTION_REKEY_SSH_KEY}" ]]; then
+  ssh-add -q "${GITS_ENCRYPTION_REKEY_SSH_KEY}" || {
+    echo "${0} error: ssh-add failed for GITS_ENCRYPTION_REKEY_SSH_KEY=>${GITS_ENCRYPTION_REKEY_SSH_KEY}<"
     /bin/bash "${_DIR}/stop.sh"
     exit 1
   }

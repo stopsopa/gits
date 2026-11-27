@@ -88,8 +88,8 @@ files, and, only for a rotation, the new keys:
 
 | | the server of this demo (`server.ts`) |
 |---|---|
-| the key in use | `GITS_DEMO_SSH_KEY` |
-| the new key, only for `rekey` / `rewrap` | `GITS_DEMO_NEW_SSH_KEY` |
+| the key in use | `GITS_ENCRYPTION_SSH_KEY` |
+| the new key, only for `rekey` / `rewrap` | `GITS_ENCRYPTION_REKEY_SSH_KEY` |
 
 - without a new key a `rekey` / `rewrap` request answers `error USAGE`
 - a file which the key in use doesn't open answers `error AUTH`
@@ -158,7 +158,7 @@ Lifecycle: the command is `crypt` (`GITS_CRYPT_START`, ... 14 events, no events 
 | `src/socket.rs` | requests `rekey`, `rewrap`; `AUTH` explained |
 | `src/ops.rs` | `without_socket`: the table "What `:e:` does" for diff, isinsync, push, pull, state |
 | `src/events.rs`, `src/main.rs` | command `crypt`: events, arguments, `--help` |
-| `examples/encrypt/server.ts` | `rekey`, `rewrap`, `GITS_DEMO_NEW_SSH_KEY`, `mode: "auto"` |
+| `examples/encrypt/server.ts` | `rekey`, `rewrap`, `GITS_ENCRYPTION_REKEY_SSH_KEY`, `mode: "auto"` |
 | `examples/encrypt/env.sh`, `keys.sh`, `start.sh`, `gits.sh`, `reset_setup.sh` | two keys (`key`, `key2`), a key by its name, the new key in the agent, an empty `GITS_ENCRYPTION_SOCKET` = no socket, `GITS_DEMO_WORK`, a binary file in `repob` |
 | `tests/test016` | both sequences below, 34 checks |
 | docs | `README.md` (9. Encrypted files), `gits --help`, `LIFECYCLE.md`, `CHANGES.md`, `ENCRYPT_PROCESS.md` |
@@ -197,10 +197,10 @@ cat "gits_source/git@github.com:demo__repoa.git/.env"     # plain text again
 (cd repoa && GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh diff)    # works without the socket again
 
 # encrypt again, with the other key
-GITS_DEMO_SSH_KEY=key2 /bin/bash gits.sh crypt encrypt all --yes
+GITS_ENCRYPTION_SSH_KEY=key2 /bin/bash gits.sh crypt encrypt all --yes
 /bin/bash gits.sh crypt status --storage                  # the fingerprint of key2
 (cd repoa && /bin/bash ../gits.sh diff)                   # AUTH: key doesn't open it
-(cd repoa && GITS_DEMO_SSH_KEY=key2 /bin/bash ../gits.sh diff)   # in sync
+(cd repoa && GITS_ENCRYPTION_SSH_KEY=key2 /bin/bash ../gits.sh diff)   # in sync
 ```
 
 ### B. from scratch: encrypted, then rekey
@@ -212,14 +212,14 @@ GITS_DEMO_SSH_KEY=key2 /bin/bash gits.sh crypt encrypt all --yes
 /bin/bash gits.sh crypt status all                        # encrypted: 4, the fingerprint of key
 
 /bin/bash gits.sh crypt rekey --storage --yes             # USAGE: the server has no new key
-GITS_DEMO_NEW_SSH_KEY=key2 /bin/bash gits.sh crypt rekey --storage --yes
+GITS_ENCRYPTION_REKEY_SSH_KEY=key2 /bin/bash gits.sh crypt rekey --storage --yes
 /bin/bash gits.sh crypt status --storage                  # the fingerprint of key2
 
 (cd repoa && /bin/bash ../gits.sh diff)                   # AUTH: key is out
-(cd repoa && GITS_DEMO_SSH_KEY=key2 /bin/bash ../gits.sh diff)   # in sync
+(cd repoa && GITS_ENCRYPTION_SSH_KEY=key2 /bin/bash ../gits.sh diff)   # in sync
 
 # only the key line, back to key, only repoa
-(cd repoa && GITS_DEMO_SSH_KEY=key2 GITS_DEMO_NEW_SSH_KEY=key /bin/bash ../gits.sh crypt rekey --rewrap-only --yes)
+(cd repoa && GITS_ENCRYPTION_SSH_KEY=key2 GITS_ENCRYPTION_REKEY_SSH_KEY=key /bin/bash ../gits.sh crypt rekey --rewrap-only --yes)
 git -C gits_source show --stat HEAD                       # one file, one line
 /bin/bash gits.sh crypt status --storage                  # repoa: key, repob: key2
 ```

@@ -8,10 +8,10 @@
  *   decode "<encrypted file>" "<plain file>"     ->   ok decode "<plain file>"
  *                                                     error <KIND> <message>
  *
- * and for "gits crypt rekey", only when GITS_DEMO_NEW_SSH_KEY is defined (else: error USAGE):
+ * and for "gits crypt rekey", only when GITS_ENCRYPTION_REKEY_SSH_KEY is defined (else: error USAGE):
  *
- *   rekey  "<encrypted file>" "<encrypted file>" ->   ok rekey "<encrypted file>"     opened with GITS_DEMO_SSH_KEY,
- *   rewrap "<encrypted file>" "<encrypted file>" ->   ok rewrap "<encrypted file>"    afterwards only GITS_DEMO_NEW_SSH_KEY
+ *   rekey  "<encrypted file>" "<encrypted file>" ->   ok rekey "<encrypted file>"     opened with GITS_ENCRYPTION_SSH_KEY,
+ *   rewrap "<encrypted file>" "<encrypted file>" ->   ok rewrap "<encrypted file>"    afterwards only GITS_ENCRYPTION_REKEY_SSH_KEY
  *                                                                                     opens it. rewrap: only the key
  *                                                                                     lines change, not the content
  *
@@ -42,9 +42,9 @@
  *
  * Env vars:
  *   GITS_ENCRYPTION_SOCKET   the socket (required)
- *   GITS_DEMO_SSH_KEY        private key file (required); <file>.pub is read, the private one
+ *   GITS_ENCRYPTION_SSH_KEY        private key file (required); <file>.pub is read, the private one
  *                            has to be loaded in the agent of SSH_AUTH_SOCK
- *   GITS_DEMO_NEW_SSH_KEY    the same for the key files get by rekey / rewrap (optional)
+ *   GITS_ENCRYPTION_REKEY_SSH_KEY    the same for the key files get by rekey / rewrap (optional)
  *   GITS_DEMO_SSENC          the ssenc binary (required): a path, or a name found in PATH
  *
  * What it prints is the log: "encrypted <file> -> <file>", "decrypted ...", "rekeyed ...", "rewrapped ...".
@@ -154,15 +154,15 @@ function ssenc(args: string[]): Promise<void> {
 }
 
 /** The key which encrypts, and which opens what is stored: its public part, a file for ssenc. */
-const currentKey = () => `${env("GITS_DEMO_SSH_KEY")}.pub`;
+const currentKey = () => `${env("GITS_ENCRYPTION_SSH_KEY")}.pub`;
 
 /** The key the stored files get by rekey / rewrap. */
 function newKey(command: Command): string {
-  if (!process.env.GITS_DEMO_NEW_SSH_KEY) {
-    throw th(`${command}: the server was started without GITS_DEMO_NEW_SSH_KEY`);
+  if (!process.env.GITS_ENCRYPTION_REKEY_SSH_KEY) {
+    throw th(`${command}: the server was started without GITS_ENCRYPTION_REKEY_SSH_KEY`);
   }
 
-  return `${process.env.GITS_DEMO_NEW_SSH_KEY}.pub`;
+  return `${process.env.GITS_ENCRYPTION_REKEY_SSH_KEY}.pub`;
 }
 
 function encode({ input, output }: Request): Promise<void> {

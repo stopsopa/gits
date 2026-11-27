@@ -6,7 +6,7 @@
 #
 #   source "${_DIR}/env.sh"
 #
-# A variable which is already defined in the terminal wins: GITS_DEMO_SSH_KEY=... /bin/bash gits.sh diff
+# A variable which is already defined in the terminal wins: GITS_ENCRYPTION_SSH_KEY=... /bin/bash gits.sh diff
 #
 
 # Where everything generated goes: gits_source/, repoa/, repob/, tmp/, server.log.
@@ -28,23 +28,31 @@ export GITS_SOURCE="${GITS_DEMO_SOURCE}"
 #   GITS_ENCRYPTION_SOCKET= /bin/bash gits.sh push --yes
 export GITS_ENCRYPTION_SOCKET="${GITS_ENCRYPTION_SOCKET-${GITS_DEMO_TMP}/ssenc.sock}"
 
-# The ssh key everything is encrypted with and which opens what is stored: the private key file,
-# its public key is next to it (<file>.pub). Read only by start.sh (loads it into the agent) and
-# server.ts. keys.sh creates two: "key" and "key2". A name without a directory is a file in
-# ${GITS_DEMO_TMP}: GITS_DEMO_SSH_KEY=key2 /bin/bash gits.sh diff
-GITS_DEMO_SSH_KEY="${GITS_DEMO_SSH_KEY:-key}"
-if [[ "${GITS_DEMO_SSH_KEY}" != */* ]]; then
-  GITS_DEMO_SSH_KEY="${GITS_DEMO_TMP}/${GITS_DEMO_SSH_KEY}"
+# The one variable which says which ssh key is used: everything is encrypted with it, and it
+# opens what is stored. The private key file, its public key is next to it (<file>.pub).
+# Read only by start.sh (loads it into the agent) and server.ts, not by gits.
+# keys.sh creates two: "key" (the default) and "key2". A name without a directory is a file in
+# ${GITS_DEMO_TMP}. To use the other key for one command, override only this variable:
+#   GITS_ENCRYPTION_SSH_KEY=key2 /bin/bash gits.sh crypt encrypt all --yes
+GITS_ENCRYPTION_SSH_KEY="${GITS_ENCRYPTION_SSH_KEY:-key}"
+if [[ "${GITS_ENCRYPTION_SSH_KEY}" != */* ]]; then
+  GITS_ENCRYPTION_SSH_KEY="${GITS_DEMO_TMP}/${GITS_ENCRYPTION_SSH_KEY}"
 fi
-export GITS_DEMO_SSH_KEY
+export GITS_ENCRYPTION_SSH_KEY
 
-# Only for "gits crypt rekey": the key the stored files get in place of GITS_DEMO_SSH_KEY.
-# Not defined (the default): the server refuses rekey requests.
-#   GITS_DEMO_NEW_SSH_KEY=key2 /bin/bash gits.sh crypt rekey --storage --yes
-if [[ -n "${GITS_DEMO_NEW_SSH_KEY}" && "${GITS_DEMO_NEW_SSH_KEY}" != */* ]]; then
-  GITS_DEMO_NEW_SSH_KEY="${GITS_DEMO_TMP}/${GITS_DEMO_NEW_SSH_KEY}"
+# Empty by default, and it should stay empty. It exists only for one example of
+# ENCRYPT_PROCESS.md, step 7 "gits crypt rekey": the only operation which needs two keys at the
+# same time. GITS_ENCRYPTION_SSH_KEY opens what is stored, this one is the key the stored files
+# get in its place. Empty: the server refuses rekey requests. Given only in the command itself:
+#   GITS_ENCRYPTION_REKEY_SSH_KEY=key2 /bin/bash gits.sh crypt rekey --storage --yes
+GITS_ENCRYPTION_REKEY_SSH_KEY="${GITS_ENCRYPTION_REKEY_SSH_KEY:-}"
+if [[ -n "${GITS_ENCRYPTION_REKEY_SSH_KEY}" && "${GITS_ENCRYPTION_REKEY_SSH_KEY}" != */* ]]; then
+  GITS_ENCRYPTION_REKEY_SSH_KEY="${GITS_DEMO_TMP}/${GITS_ENCRYPTION_REKEY_SSH_KEY}"
 fi
-export GITS_DEMO_NEW_SSH_KEY
+export GITS_ENCRYPTION_REKEY_SSH_KEY
+	# it is not consumed by gits itself but by 
+	# 	- start.sh to load to ssh-add and 
+	# 	- server.ts to call ssenc with "--ssh-key", currentKey(), "--new-ssh-key"
 
 # Socket of the ssh-agent which start.sh starts only for the demo: the key above is loaded into
 # this one, never into your own agent.
