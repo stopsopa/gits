@@ -11,32 +11,30 @@
 
 # Where everything generated goes: gits_source/, repoa/, repob/, tmp/, server.log.
 # Here, next to the scripts. The test tests/test016 points it to its own directory.
-export GITS_DEMO_WORK="${GITS_DEMO_WORK:-${_DIR}}"
-
-# The keys, the sockets, the pid files.
-GITS_DEMO_TMP="${GITS_DEMO_TMP:-${GITS_DEMO_WORK}/tmp}"
+# The keys, the sockets and the pid files are in its directory tmp/ (${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp).
+export GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES="${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES:-${_DIR}}"
 
 # The storage of the demo: a local git repository created by reset_setup.sh. gits reads it from
 # GITS_SOURCE. Deliberately not "the one of the terminal wins": GITS_SOURCE of your terminal is
 # your real storage, and the demo must never push there. To use another one: GITS_DEMO_SOURCE.
-GITS_DEMO_SOURCE="${GITS_DEMO_SOURCE:-${GITS_DEMO_WORK}/gits_source}"
+GITS_DEMO_SOURCE="${GITS_DEMO_SOURCE:-${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/gits_source}"
 export GITS_SOURCE="${GITS_DEMO_SOURCE}"
 
 # The second variable gits reads: the unix socket it sends encode / decode requests to.
 # start.sh starts the server on it, stop.sh removes it. At most about 100 characters.
 # Defined as an empty text: no socket. gits.sh starts gits without it (and starts no server):
 #   GITS_ENCRYPTION_SOCKET= /bin/bash gits.sh push --yes
-export GITS_ENCRYPTION_SOCKET="${GITS_ENCRYPTION_SOCKET-${GITS_DEMO_TMP}/ssenc.sock}"
+export GITS_ENCRYPTION_SOCKET="${GITS_ENCRYPTION_SOCKET-${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/ssenc.sock}"
 
 # The one variable which says which ssh key is used: everything is encrypted with it, and it
 # opens what is stored. The private key file, its public key is next to it (<file>.pub).
 # Read only by start.sh (loads it into the agent) and server.ts, not by gits.
 # keys.sh creates two: "key" (the default) and "key2". A name without a directory is a file in
-# ${GITS_DEMO_TMP}. To use the other key for one command, override only this variable:
+# ${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp. To use the other key for one command, override only this variable:
 #   GITS_ENCRYPTION_SSH_KEY=key2 /bin/bash gits.sh crypt encrypt all --yes
 GITS_ENCRYPTION_SSH_KEY="${GITS_ENCRYPTION_SSH_KEY:-key}"
 if [[ "${GITS_ENCRYPTION_SSH_KEY}" != */* ]]; then
-  GITS_ENCRYPTION_SSH_KEY="${GITS_DEMO_TMP}/${GITS_ENCRYPTION_SSH_KEY}"
+  GITS_ENCRYPTION_SSH_KEY="${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/${GITS_ENCRYPTION_SSH_KEY}"
 fi
 export GITS_ENCRYPTION_SSH_KEY
 
@@ -47,7 +45,7 @@ export GITS_ENCRYPTION_SSH_KEY
 #   GITS_ENCRYPTION_REKEY_SSH_KEY=key2 /bin/bash gits.sh crypt rekey --storage --yes
 GITS_ENCRYPTION_REKEY_SSH_KEY="${GITS_ENCRYPTION_REKEY_SSH_KEY:-}"
 if [[ -n "${GITS_ENCRYPTION_REKEY_SSH_KEY}" && "${GITS_ENCRYPTION_REKEY_SSH_KEY}" != */* ]]; then
-  GITS_ENCRYPTION_REKEY_SSH_KEY="${GITS_DEMO_TMP}/${GITS_ENCRYPTION_REKEY_SSH_KEY}"
+  GITS_ENCRYPTION_REKEY_SSH_KEY="${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/${GITS_ENCRYPTION_REKEY_SSH_KEY}"
 fi
 export GITS_ENCRYPTION_REKEY_SSH_KEY
 	# it is not consumed by gits itself but by 
@@ -56,11 +54,11 @@ export GITS_ENCRYPTION_REKEY_SSH_KEY
 
 # Socket of the ssh-agent which start.sh starts only for the demo: the key above is loaded into
 # this one, never into your own agent.
-GITS_DEMO_AGENT="${GITS_DEMO_AGENT:-${GITS_DEMO_TMP}/agent.sock}"
+GITS_DEMO_AGENT="${GITS_DEMO_AGENT:-${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/agent.sock}"
 
 # Log of the server: one line per file, "encrypted <file> -> <file>" or "decrypted <file> -> <file>".
 # Defined as an empty text (GITS_DEMO_LOG=""): nothing is logged.
-GITS_DEMO_LOG="${GITS_DEMO_LOG-${GITS_DEMO_WORK}/server.log}"
+GITS_DEMO_LOG="${GITS_DEMO_LOG-${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/server.log}"
 
 # The program which really encrypts: server.js starts it for every request.
 #

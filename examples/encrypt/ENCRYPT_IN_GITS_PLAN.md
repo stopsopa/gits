@@ -159,7 +159,7 @@ Lifecycle: the command is `crypt` (`GITS_CRYPT_START`, ... 14 events, no events 
 | `src/ops.rs` | `without_socket`: the table "What `:e:` does" for diff, isinsync, push, pull, state |
 | `src/events.rs`, `src/main.rs` | command `crypt`: events, arguments, `--help` |
 | `examples/encrypt/server.ts` | `rekey`, `rewrap`, `GITS_ENCRYPTION_REKEY_SSH_KEY`, `mode: "auto"` |
-| `examples/encrypt/env.sh`, `keys.sh`, `start.sh`, `gits.sh`, `reset_setup.sh` | two keys (`key`, `key2`), a key by its name, the new key in the agent, an empty `GITS_ENCRYPTION_SOCKET` = no socket, `GITS_DEMO_WORK`, a binary file in `repob` |
+| `examples/encrypt/env.sh`, `keys.sh`, `start.sh`, `gits.sh`, `reset_setup.sh` | two keys (`key`, `key2`), a key by its name, the new key in the agent, an empty `GITS_ENCRYPTION_SOCKET` = no socket, `GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES`, a binary file in `repob` |
 | `tests/test016` | both sequences below, 34 checks |
 | docs | `README.md` (9. Encrypted files), `gits --help`, `LIFECYCLE.md`, `CHANGES.md`, `ENCRYPT_PROCESS.md` |
 

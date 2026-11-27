@@ -2,7 +2,7 @@
 # Encryption of the storage as a whole, through the demo examples/encrypt (ENCRYPT_PROCESS.md):
 # its wrapper gits.sh starts an encoder process for every command (start.sh, at the event START)
 # and stops it at the end (stop.sh, GITS_EXIT), its reset_setup.sh creates a storage and two
-# projects. Everything is created in tests/test016/tmp/demo (GITS_DEMO_WORK), not in examples/encrypt.
+# projects. Everything is created in tests/test016/tmp/demo (GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES), not in examples/encrypt.
 #
 # What is tested, in this order:
 #
@@ -66,7 +66,7 @@ ENC="${_ROOT}/examples/encrypt"
 DEMO="${WORK}/demo"
 
 # the demo creates everything here, and its wrapper starts the binary under test
-export GITS_DEMO_WORK="${DEMO}"
+export GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES="${DEMO}"
 export GITS_DEMO_BIN="${BIN}"
 
 # the storage of the demo, seen from the test

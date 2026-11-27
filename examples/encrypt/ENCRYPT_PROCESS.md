@@ -141,8 +141,7 @@ is never contacted: gits only takes the name of the directory in the storage fro
 | `GITS_DEMO_SSENC` | `examples/encrypt/bin/ssenc` | the binary `server.js` starts for every request: `rust/target/release/ssenc` of the encrypt repository. A path, or a name found in `PATH` (`GITS_DEMO_SSENC=ssenc` when you installed it) |
 | `GITS_DEMO_ENCRYPT` | `__linked/STOPSOPA__encrypt/STOPSOPA__encrypt`, then `submodules/encrypt` | only `encrypt.sh`: the checkout the binary is copied from |
 | `GITS_DEMO_BIN` | `bin/<arch>/gits` | the gits binary `gits.sh` starts |
-| `GITS_DEMO_WORK` | `examples/encrypt` | where everything generated goes: `gits_source/`, `repoa/`, `repob/`, `tmp/`, `server.log` |
-| `GITS_DEMO_TMP` | `examples/encrypt/tmp` | keys, sockets, pid files |
+| `GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES` | `examples/encrypt` | where everything generated goes: `gits_source/`, `repoa/`, `repob/`, `tmp/`, `server.log` |
 
 A variable defined in the terminal wins over the default (besides `GITS_SOURCE`): `GITS_DEMO_LOG="" /bin/bash examples/encrypt/gits.sh diff`.
 

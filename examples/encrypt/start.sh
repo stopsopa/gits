@@ -41,12 +41,12 @@ if [[ ! -f "${GITS_ENCRYPTION_SSH_KEY}" ]]; then
   exit 1
 fi
 
-mkdir -p "${GITS_DEMO_TMP}"
+mkdir -p "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp"
 
 # 1. The agent. It prints "SSH_AUTH_SOCK=...; SSH_AGENT_PID=...;": eval defines both, only
 #    inside of this script, so ssh-add and the server below talk to this agent.
 eval "$(ssh-agent -a "${GITS_DEMO_AGENT}")" > /dev/null
-echo "${SSH_AGENT_PID}" > "${GITS_DEMO_TMP}/agent.pid"
+echo "${SSH_AGENT_PID}" > "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/agent.pid"
 
 ssh-add -q "${GITS_ENCRYPTION_SSH_KEY}" || {
   echo "${0} error: ssh-add failed for GITS_ENCRYPTION_SSH_KEY=>${GITS_ENCRYPTION_SSH_KEY}<"
@@ -74,7 +74,7 @@ fi
 
 NODE_OPTIONS="" nohup node "${_DIR}/server.js" < /dev/null >> "${GITS_DEMO_LOG:-/dev/null}" 2>&1 &
 PID="${!}"
-echo "${PID}" > "${GITS_DEMO_TMP}/server.pid"
+echo "${PID}" > "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/server.pid"
 
 # it listens: the socket file appears (at most 5 seconds). It died: no reason to wait.
 for I in $(seq 1 100); do

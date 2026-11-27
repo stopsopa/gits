@@ -33,8 +33,8 @@ esac
 
 source "${_DIR}/env.sh"
 
-# everything generated is here (examples/encrypt, unless GITS_DEMO_WORK says something else)
-W="${GITS_DEMO_WORK}"
+# everything generated is here (examples/encrypt, unless GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES says something else)
+W="${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}"
 
 GREEN=$'\033[32m'
 RESET=$'\033[0m'
@@ -75,8 +75,8 @@ function gits {
 # --- state 0: nothing running, nothing generated
 
 /bin/bash "${_DIR}/stop.sh"
-mkdir -p "${W}" || fail "can't create directory GITS_DEMO_WORK=>${W}<"
-rm -rf "${GITS_DEMO_TMP:?}" "${W:?}/server.log"
+mkdir -p "${W}" || fail "can't create directory GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES=>${W}<"
+rm -rf "${W:?}/tmp" "${W:?}/server.log"
 
 /bin/bash "${_DIR}/keys.sh" || fail "keys.sh failed"
 

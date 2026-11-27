@@ -1,6 +1,6 @@
 #
 # Creates the ssh keys of the demo examples/encrypt/ENCRYPT_PROCESS.md, two key pairs without a
-# passphrase in ${GITS_DEMO_TMP} (see env.sh): key + key.pub, the one in use, and key2 + key2.pub,
+# passphrase in ${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp (see env.sh): key + key.pub, the one in use, and key2 + key2.pub,
 # to change to (gits crypt rekey). A key which is already there is not changed.
 #
 #   /bin/bash examples/encrypt/keys.sh        (from any directory)
@@ -22,10 +22,10 @@ esac
 
 source "${_DIR}/env.sh"
 
-mkdir -p "${GITS_DEMO_TMP}"
+mkdir -p "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp"
 
 for NAME in key key2; do
-  KEY="${GITS_DEMO_TMP}/${NAME}"
+  KEY="${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/${NAME}"
   if [[ -f "${KEY}" ]]; then
     echo "the key is already there: ${KEY}"
     continue

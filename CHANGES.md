@@ -357,7 +357,7 @@ The design and the decisions: `examples/encrypt/ENCRYPT_IN_GITS_PLAN.md`.
 - `AUTH` from the encoder process is explained: the file is stored with another key
 - lifecycle: command `crypt` with 14 events (`GITS_CRYPT_*`), 148 event variables in total
 - demo: two keys (`key`, `key2`), `GITS_ENCRYPTION_REKEY_SSH_KEY`, an empty `GITS_ENCRYPTION_SOCKET` for the wrapper (no socket),
-  `GITS_DEMO_WORK`, a binary file in `repob`, mode `auto` (the library decides lines / blob),
+  `GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES`, a binary file in `repob`, mode `auto` (the library decides lines / blob),
   steps 6 and 7 of `ENCRYPT_PROCESS.md`
 - test: `tests/test016` (runs the demo in `tests/test016/tmp/demo`)
 

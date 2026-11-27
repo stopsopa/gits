@@ -38,7 +38,7 @@ function stop {
   rm -f "${1}"
 }
 
-stop "${GITS_DEMO_TMP}/server.pid" "encrypt/server."
-stop "${GITS_DEMO_TMP}/agent.pid" "ssh-agent"
+stop "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/server.pid" "encrypt/server."
+stop "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/agent.pid" "ssh-agent"
 
 rm -f "${GITS_ENCRYPTION_SOCKET}" "${GITS_DEMO_AGENT}"
