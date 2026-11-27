@@ -50,14 +50,24 @@ where
         pwd,
         mut on_stdout,
         mut on_stderr,
+        stdout_into_stderr,
     } = options;
 
     let mut command = Command::new(program);
     command
         .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stdin(Stdio::null());
+
+    // stdout_into_stderr: the child writes both to ONE pipe, like "2>&1" of a shell. Two pipes
+    // are read by two threads, and which chunk comes first would be a matter of luck
+    let merged = if stdout_into_stderr {
+        let (read, write) = io::pipe()?;
+        command.stdout(write.try_clone()?).stderr(write);
+        Some(read)
+    } else {
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+        None
+    };
 
     if !inherit_env {
         command.env_clear();
@@ -73,13 +83,16 @@ where
     }
 
     let mut child = command.spawn()?;
+    // it holds the writing ends of the merged pipe: with them open the pipe would never end
+    drop(command);
 
     // both streams have to be read at the same time (a full pipe of one would block the program),
     // the chunks come to this thread in the order they arrived
     let (sender, receiver) = mpsc::channel::<(Stream, Vec<u8>)>();
     let readers = [
         reader(Stream::Stdout, child.stdout.take(), sender.clone()),
-        reader(Stream::Stderr, child.stderr.take(), sender),
+        reader(Stream::Stderr, child.stderr.take(), sender.clone()),
+        reader(Stream::Stderr, merged, sender),
     ];
 
     let mut stdout = Vec::new();
@@ -129,6 +142,8 @@ pub struct Options<'a> {
     on_stdout: Option<Callback<'a>>,
     // called with every chunk of stderr as it arrives
     on_stderr: Option<Callback<'a>>,
+    // stdout of the child is its stderr ("2>&1"): everything arrives as stderr, in the order it was written
+    stdout_into_stderr: bool,
 }
 
 // env / env_remove / inherit_env: part of the interface (and tested), gits itself has no use for them yet
@@ -141,7 +156,14 @@ impl<'a> Options<'a> {
             pwd: None,
             on_stdout: None,
             on_stderr: None,
+            stdout_into_stderr: false,
         }
+    }
+
+    // what the child prints on stdout goes to its stderr, like "2>&1": one stream, the order kept
+    pub fn stdout_into_stderr(mut self) -> Self {
+        self.stdout_into_stderr = true;
+        self
     }
 
     pub fn pwd(mut self, pwd: impl AsRef<Path>) -> Self {
@@ -299,6 +321,19 @@ mod tests {
     fn arguments_as_they_are_no_shell() {
         let out = cli("printf", ["%s|", "a b", "$HOME", "*"], Options::new()).unwrap();
         assert_eq!(out.stdout_text(), "a b|$HOME|*|");
+    }
+
+    #[test]
+    fn stdout_into_stderr_keeps_the_order() {
+        // many times: with two pipes the order was a matter of luck
+        for _ in 0..50 {
+            let out = sh(
+                "echo 1; echo 2 >&2; echo 3; echo 4 >&2",
+                Options::new().stdout_into_stderr(),
+            );
+            assert_eq!(out.stdout_text(), "");
+            assert_eq!(out.stderr_text(), "1\n2\n3\n4\n");
+        }
     }
 
     #[test]

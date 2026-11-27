@@ -1,3 +1,6 @@
+# esbuild (package.json), used by examples/encrypt/encrypt.sh
+/node_modules/
+
 # Rust build artifacts
 /target/
 /bin/
@@ -10,6 +13,8 @@
 /node_modules/
 # examples/encrypt/ENCRYPT_PROCESS.md: everything its scripts create
 /examples/encrypt/tmp/
+/examples/encrypt/bin/
+/examples/encrypt/server.js
 /examples/encrypt/server.log
 /examples/encrypt/gits_source/
 /examples/encrypt/repoa/

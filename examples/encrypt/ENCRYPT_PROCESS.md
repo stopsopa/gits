@@ -10,7 +10,7 @@ socket. Here that process lives only as long as one `gits` command:
         |  defines the env vars (env.sh), GITS_START=start.sh, GITS_EXIT=stop.sh, starts the gits binary
         v
       gits ---- GITS_START -----> start.sh   once, before anything else:
-        |                                    ssh-agent with the key + server.ts on the socket
+        |                                    ssh-agent with the key + server.js on the socket
         |                                    + a test: a file encrypted, decrypted, compared.
         |                                    gits waits. A failure stops gits.
         |
@@ -34,20 +34,27 @@ Everything is in `examples/encrypt/`:
 | [start.sh](start.sh) | starts the agent and the server, tests the encryption |
 | [stop.sh](stop.sh) | stops them |
 | [server.ts](server.ts) | the server behind the socket: request, work, reply, socket, test, in that order |
+| [encrypt.sh](encrypt.sh) | copies the binary which encrypts (`ssenc`) to `bin/` and turns `server.ts` into `server.js` (esbuild) |
+| `package.json` | one line, `"type": "module"`: `server.js` is an ES module |
 | [ENCRYPT_IN_GITS_PLAN.md](ENCRYPT_IN_GITS_PLAN.md) | the design of what steps 6 and 7 show: gits without the socket, `gits crypt` |
 | [gits.sh](gits.sh) | the wrapper you call in place of `gits` |
 | [reset_setup.sh](reset_setup.sh) | brings the demo to its state 0: removes and creates again everything below |
 | `gits_source/` | generated: the storage, a local git repository (`GITS_SOURCE` of the demo) |
 | `repoa/`, `repob/` | generated: two projects to play with |
 | `tmp/` | generated: key, sockets, pid files |
+| `server.js` | generated: what `start.sh` runs, `server.ts` as JavaScript |
+| `bin/ssenc` | generated: a copy of the Rust binary of [encrypt](https://github.com/stopsopa/encrypt), the program which really encrypts |
 | `server.log` | generated: log of the server |
 
 Everything generated is ignored by git.
 
-Needs: Node.js >= 22.18, `ssh-keygen` / `ssh-agent` / `ssh-add`, the compiled gits
+Needs: Node.js >= 22.18, `pnpm`, `ssh-keygen` / `ssh-agent` / `ssh-add` and the compiled gits
 (`/bin/bash compile.sh`) and a checkout of [encrypt](https://github.com/stopsopa/encrypt) in
-`__linked/STOPSOPA__encrypt/STOPSOPA__encrypt` (somewhere else: `GITS_DEMO_ENCRYPT` in `env.sh`,
-e.g. `submodules/encrypt`).
+`__linked/STOPSOPA__encrypt/STOPSOPA__encrypt` or `submodules/encrypt` (with `cargo`, when its
+binary is not built yet), or the `ssenc` binary installed by you (`GITS_DEMO_SSENC`).
+
+Who does what: gits sends a request to the socket, `server.js` listens there and starts the
+binary `ssenc` for every request, `ssenc` asks the ssh-agent and writes the file.
 
 Your own ssh-agent and your own keys are not touched: the demo has an agent of its own.
 
@@ -88,6 +95,19 @@ The first command of the demo, and again whenever you want to start from scratch
 | `repoa/` | a project. In git: `README.md`, `src/app.js`, `config/default.json`. Ignored by git: `.env`, `config/local.json` |
 | `repob/` | a project. In git: `README.md`, `main.sh`. Ignored by git: `.env.local`, `secrets/token.txt`, `secrets/cert.bin` (binary), `notes.txt` |
 | `tmp/key`, `tmp/key2` | two new keys (and their `.pub`) |
+| `server.js`, `bin/ssenc` | built / copied again by [encrypt.sh](encrypt.sh) |
+
+`encrypt.sh` does three things:
+
+1. copies the binary `rust/target/release/ssenc` from the checkout of
+   [encrypt](https://github.com/stopsopa/encrypt) to `bin/ssenc` (and builds it there first, when
+   it is not built: `rust/compile.sh`). Skipped when `GITS_DEMO_SSENC` points to your own binary
+2. `pnpm install` in the root of this repository, only when `esbuild` is not there yet
+3. `esbuild`: `server.ts` -> `server.js`
+
+```sh
+/bin/bash examples/encrypt/encrypt.sh     # after an edit of server.ts (start.sh does it too)
+```
 
 In both projects it already ran, through the wrapper, `gits init` (creates `.git/gits.sh`)
 and `gits add` for the ignored files (`gits add -e` for the secret ones):
@@ -119,7 +139,8 @@ is never contacted: gits only takes the name of the directory in the storage fro
 | `GITS_DEMO_NO_SOCKET` | not defined | `1`: the wrapper starts gits without `GITS_ENCRYPTION_SOCKET` and without `start.sh` / `stop.sh` |
 | `GITS_DEMO_LOG` | `examples/encrypt/server.log` | log of the server. Empty (`GITS_DEMO_LOG=""`): no log |
 | `GITS_DEMO_AGENT` | `examples/encrypt/tmp/agent.sock` | socket of the ssh-agent of the demo |
-| `GITS_DEMO_ENCRYPT` | `__linked/STOPSOPA__encrypt/STOPSOPA__encrypt` | checkout of the encrypt repository |
+| `GITS_DEMO_SSENC` | `examples/encrypt/bin/ssenc` | the binary `server.js` starts for every request: `rust/target/release/ssenc` of the encrypt repository. A path, or a name found in `PATH` (`GITS_DEMO_SSENC=ssenc` when you installed it) |
+| `GITS_DEMO_ENCRYPT` | `__linked/STOPSOPA__encrypt/STOPSOPA__encrypt`, then `submodules/encrypt` | only `encrypt.sh`: the checkout the binary is copied from |
 | `GITS_DEMO_BIN` | `bin/<arch>/gits` | the gits binary `gits.sh` starts |
 | `GITS_DEMO_WORK` | `examples/encrypt` | where everything generated goes: `gits_source/`, `repoa/`, `repob/`, `tmp/`, `server.log` |
 | `GITS_DEMO_TMP` | `examples/encrypt/tmp` | keys, sockets, pid files |
@@ -157,8 +178,45 @@ cat examples/encrypt/server.log           # listening on ..., then the test: one
 `start.sh` does three things and ends only when all of them worked:
 
 1. an ssh-agent listening on `examples/encrypt/tmp/agent.sock`, with the key loaded
-2. `node examples/encrypt/server.ts` in the background, listening on `GITS_ENCRYPTION_SOCKET`
-3. `node examples/encrypt/server.ts test`: through the socket a file is encrypted, decrypted and compared
+2. `node examples/encrypt/server.js` in the background, listening on `GITS_ENCRYPTION_SOCKET`
+   (`encrypt.sh` runs first when `server.js` or the binary is missing, or `server.ts` is newer)
+3. `node examples/encrypt/server.js test`: through the socket a file is encrypted, decrypted and compared
+
+**Talk to the socket yourself.** The server is running now, and what gits does with it is no
+more than this: one line of text to the socket, one line back. `nc -U` connects to a unix
+socket; a path has to be absolute (a relative one would be read from the directory of the
+server) and in quotes:
+
+```sh
+# one request: the line goes to the socket, the reply line is printed.
+# sleep: nc must not close the connection before the reply came
+function ask { (echo "${1}"; sleep 0.3) | nc -U examples/encrypt/tmp/ssenc.sock; }
+
+mkdir -p examples/encrypt/tmp/hand
+H="${PWD}/examples/encrypt/tmp/hand"
+printf "API_KEY=by-hand\nDB_PASSWORD=secret\n" > "${H}/plain.txt"
+
+ask "encode \"${H}/plain.txt\" \"${H}/encrypted.txt\""       # ok encode ".../hand/encrypted.txt"
+cat "${H}/encrypted.txt"                  # #ssenc1 lines ..., #slot ssh ssh-ed25519 SHA256:..., then one line for each line
+
+ask "decode \"${H}/encrypted.txt\" \"${H}/back.txt\""        # ok decode ".../hand/back.txt"
+diff "${H}/plain.txt" "${H}/back.txt" && echo identical
+
+# a binary file: the same request, ssenc stores it in its other form
+head -c 100 /dev/urandom > "${H}/plain.bin"
+ask "encode \"${H}/plain.bin\" \"${H}/encrypted.bin\""
+head -1 "${H}/encrypted.bin"              # #ssenc1 blob ...
+
+# errors are replies too: gits shows them and stops
+ask "decode \"${H}/plain.txt\" \"${H}/x.txt\""               # error MALFORMED not an ssenc1 file (missing '#ssenc1' header)
+ask "hello"                               # error USAGE ... not a request >hello<
+ask "rekey \"${H}/encrypted.txt\" \"${H}/rekeyed.txt\""      # error USAGE ... started without GITS_DEMO_NEW_SSH_KEY (step 7)
+
+tail -8 examples/encrypt/server.log       # every request above: encrypted / decrypted / error, with the paths
+rm -rf examples/encrypt/tmp/hand
+```
+
+Now stop it:
 
 ```sh
 /bin/bash examples/encrypt/stop.sh        # prints nothing
@@ -264,7 +322,7 @@ head -n 1 "gits_source/git@github.com:demo__repob.git/secrets/token.txt"   # #ss
 head -n 1 "gits_source/git@github.com:demo__repob.git/secrets/cert.bin"    # #ssenc1 blob ...   binary: as a whole
 ```
 
-Text or binary is decided by the library (the server passes `mode: "auto"`), not by gits and
+Text or binary is decided by `ssenc` (the server passes `--mode auto`), not by gits and
 not by the server.
 
 **No socket any more, but the files are encrypted.** That is an error, nothing is touched:
@@ -391,6 +449,9 @@ nothing is started for them, and `stop.sh` finds nothing to stop.
 - your key is already in your own agent: in `start.sh` drop the two commands of its part 1
   (`ssh-agent`, `ssh-add`), in `stop.sh` the line of the agent, and point `GITS_DEMO_SSH_KEY`
   to your key (`~/.ssh/id_ed25519`); the server then asks the agent of `SSH_AUTH_SOCK`
+- the binary: install `rust/target/release/ssenc` of the encrypt repository where you keep your
+  programs and point `GITS_DEMO_SSENC` in `env.sh` to it (a path, or `ssenc` when it is in `PATH`).
+  `encrypt.sh` copies nothing then, and `bin/` is not needed
 - `alias gits='/bin/bash /path/to/examples/encrypt/gits.sh'`
 - one gits at a time: two commands running together share the socket, and the one which ends
   first stops the server of the other
@@ -404,5 +465,5 @@ from the root of this repository:
 
 ```sh
 /bin/bash examples/encrypt/stop.sh
-rm -rf examples/encrypt/tmp examples/encrypt/gits_source examples/encrypt/repoa examples/encrypt/repob examples/encrypt/server.log
+rm -rf examples/encrypt/tmp examples/encrypt/gits_source examples/encrypt/repoa examples/encrypt/repob examples/encrypt/server.log examples/encrypt/server.js examples/encrypt/bin
 ```

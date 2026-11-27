@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -944,11 +943,7 @@ pub fn fire(event: &str, args: &[String], extra: &[(&str, String)]) -> Result<()
 
             let mut options = options(&prepared, call, &path).forward_stderr();
             options = if prepared.stdout_to_stderr {
-                options.on_stdout(|chunk| {
-                    let mut err = std::io::stderr();
-                    let _ = err.write_all(chunk);
-                    let _ = err.flush();
-                })
+                options.stdout_into_stderr()
             } else {
                 options.forward_stdout()
             };
@@ -1072,11 +1067,7 @@ fn global(variable: &str, name: &str, command: &str, pwd: &Path, code: Option<i3
         .env("GITS_EVENT_TRIGGER_FROM", "env")
         .env("GITS_EVENT_SCRIPT", &path)
         .env(ENV_RUNNING, "1")
-        .on_stdout(|chunk| {
-            let mut err = std::io::stderr();
-            let _ = err.write_all(chunk);
-            let _ = err.flush();
-        });
+        .stdout_into_stderr();
     let shell = config::shell();
     match cli(&shell, &all, options) {
         Ok(out) if out.success() => None,

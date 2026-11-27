@@ -52,8 +52,25 @@ GITS_DEMO_AGENT="${GITS_DEMO_AGENT:-${GITS_DEMO_TMP}/agent.sock}"
 # Defined as an empty text (GITS_DEMO_LOG=""): nothing is logged.
 GITS_DEMO_LOG="${GITS_DEMO_LOG-${GITS_DEMO_WORK}/server.log}"
 
-# Checkout of https://github.com/stopsopa/encrypt: server.ts takes encrypt() and decrypt() from it.
-export GITS_DEMO_ENCRYPT="${GITS_DEMO_ENCRYPT:-${_DIR}/../../__linked/STOPSOPA__encrypt/STOPSOPA__encrypt}"
+# The program which really encrypts: server.js starts it for every request.
+#
+# It is the Rust binary "ssenc" of https://github.com/stopsopa/encrypt, in a checkout of it:
+#
+#   rust/target/release/ssenc        built by: /bin/bash rust/compile.sh   (cargo build --release)
+#
+# (not rust/bin/ssenc: that one is a shell script which starts the file above.)
+# One file, no other file of that repository is needed next to it.
+#
+# For the demo encrypt.sh copies it to examples/encrypt/bin/ssenc, from
+# __linked/STOPSOPA__encrypt/STOPSOPA__encrypt or from submodules/encrypt (GITS_DEMO_ENCRYPT).
+# For real: install that file wherever you want and point this variable to it,
+# a path (GITS_DEMO_SSENC=/usr/local/bin/ssenc) or a name found in PATH (GITS_DEMO_SSENC=ssenc).
+# encrypt.sh copies nothing then.
+export GITS_DEMO_SSENC="${GITS_DEMO_SSENC:-${_DIR}/bin/ssenc}"
+
+# Only for encrypt.sh: the checkout of the encrypt repository the binary above is copied from.
+# Not defined: __linked/STOPSOPA__encrypt/STOPSOPA__encrypt, then submodules/encrypt.
+GITS_DEMO_ENCRYPT="${GITS_DEMO_ENCRYPT:-}"
 
 # The gits binary which gits.sh starts: the one compiled here (/bin/bash compile.sh).
 GITS_DEMO_BIN="${GITS_DEMO_BIN:-$(ls "${_DIR}"/../../bin/*/gits 2> /dev/null | head -n 1)}"

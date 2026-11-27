@@ -23,7 +23,8 @@ gits knows two things: the socket, and whether a file looks encrypted. Which key
 which key opens a file is the business of the server behind the socket. No key names and no
 second set of variables in gits.
 
-And the server decides nothing about a file either: it passes the data to the library. Text or
+And the server decides nothing about a file either: it passes the data to the library
+(since then: it starts the binary `ssenc` of the same repository, `GITS_DEMO_SSENC`). Text or
 binary (`lines` or `blob` mode) is detected by the library, the server only asks for `mode: "auto"`.
 
 ## What the design of encrypt dictates

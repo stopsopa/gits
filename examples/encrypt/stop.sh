@@ -1,5 +1,5 @@
 #
-# Stops what start.sh started (demo examples/encrypt/ENCRYPT_PROCESS.md): the server examples/encrypt/server.ts
+# Stops what start.sh started (demo examples/encrypt/ENCRYPT_PROCESS.md): the server examples/encrypt/server.js
 # and the ssh-agent of the demo, and removes their sockets and pid files.
 # Nothing runs: nothing happens, exit code 0. Prints nothing.
 #
@@ -38,7 +38,7 @@ function stop {
   rm -f "${1}"
 }
 
-stop "${GITS_DEMO_TMP}/server.pid" "server.ts"
+stop "${GITS_DEMO_TMP}/server.pid" "encrypt/server."
 stop "${GITS_DEMO_TMP}/agent.pid" "ssh-agent"
 
 rm -f "${GITS_ENCRYPTION_SOCKET}" "${GITS_DEMO_AGENT}"

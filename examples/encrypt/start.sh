@@ -3,7 +3,7 @@
 # only when it works:
 #
 #   1. an ssh-agent of its own, with the key ${GITS_DEMO_SSH_KEY} loaded (your agent is not touched)
-#   2. the server examples/encrypt/server.ts on the socket ${GITS_ENCRYPTION_SOCKET}
+#   2. the server examples/encrypt/server.js on the socket ${GITS_ENCRYPTION_SOCKET}
 #   3. a test through that socket: a file is encrypted, decrypted and compared
 #
 # Exit code 0: gits can use the socket. Anything else: an error was printed.
@@ -63,7 +63,16 @@ if [[ -n "${GITS_DEMO_NEW_SSH_KEY}" ]]; then
 fi
 
 # 2. The server, in the background. Its output is the log (or nothing).
-NODE_OPTIONS="" nohup node "${_DIR}/server.ts" < /dev/null >> "${GITS_DEMO_LOG:-/dev/null}" 2>&1 &
+#    server.js (built from server.ts) and the binary which encrypts are prepared by encrypt.sh
+if [[ ! -f "${_DIR}/server.js" || "${_DIR}/server.ts" -nt "${_DIR}/server.js" ]] || ! command -v "${GITS_DEMO_SSENC}" > /dev/null; then
+  /bin/bash "${_DIR}/encrypt.sh" || {
+    echo "${0} error: encrypt.sh failed, there is no server to start"
+    /bin/bash "${_DIR}/stop.sh"
+    exit 1
+  }
+fi
+
+NODE_OPTIONS="" nohup node "${_DIR}/server.js" < /dev/null >> "${GITS_DEMO_LOG:-/dev/null}" 2>&1 &
 PID="${!}"
 echo "${PID}" > "${GITS_DEMO_TMP}/server.pid"
 
@@ -76,7 +85,7 @@ for I in $(seq 1 100); do
 done
 
 # 3. The test. It also fails when nobody listens.
-NODE_OPTIONS="" node "${_DIR}/server.ts" test || {
+NODE_OPTIONS="" node "${_DIR}/server.js" test || {
   echo "${0} error: encryption through GITS_ENCRYPTION_SOCKET=>${GITS_ENCRYPTION_SOCKET}< doesn't work, log: GITS_DEMO_LOG=>${GITS_DEMO_LOG}<"
   /bin/bash "${_DIR}/stop.sh"
   exit 1

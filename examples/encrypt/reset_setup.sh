@@ -7,6 +7,8 @@
 #   repob/         its git-ignored files registered with "gits add" (some of them encrypted)
 #   tmp/           two new ssh keys: key (the one in use) and key2 (keys.sh)
 #   server.log     removed
+#   server.js      built again from server.ts, and bin/ssenc (the binary which encrypts) copied
+#                  again from the checkout of the encrypt repository (encrypt.sh)
 #
 # Nothing is pushed to the storage: that is where you start playing.
 #
@@ -77,6 +79,10 @@ mkdir -p "${W}" || fail "can't create directory GITS_DEMO_WORK=>${W}<"
 rm -rf "${GITS_DEMO_TMP:?}" "${W:?}/server.log"
 
 /bin/bash "${_DIR}/keys.sh" || fail "keys.sh failed"
+
+# --- the server: the binary which encrypts copied to bin/, server.js built
+
+/bin/bash "${_DIR}/encrypt.sh" || fail "encrypt.sh failed"
 
 # --- the storage. Not bare, so its files can be looked at: a push updates the files too
 
@@ -150,7 +156,7 @@ cat <<'EEE' > "${W}/repob/secrets/token.txt"
 repob-token-456
 EEE
 
-# a binary file: the library stores it in its "blob" mode (the server asks for mode "auto")
+# a binary file: ssenc stores it in its "blob" mode (the server asks for --mode auto)
 head -c 256 /dev/urandom > "${W}/repob/secrets/cert.bin"
 
 cat <<'EEE' > "${W}/repob/notes.txt"

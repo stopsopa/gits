@@ -25,7 +25,7 @@
 #    10. after every command nothing runs and no socket is left; wrong arguments are explained
 #
 # Needs: the compiled binary (/bin/bash compile.sh), Node.js >= 22.18, ssh-keygen / ssh-agent /
-# ssh-add, the encrypt library (submodules/encrypt or __linked/STOPSOPA__encrypt).
+# ssh-add, esbuild (pnpm install), the ssenc binary of the encrypt repository (encrypt.sh copies it).
 #
 # /bin/bash tests/test016/test.sh
 #
@@ -68,9 +68,6 @@ DEMO="${WORK}/demo"
 # the demo creates everything here, and its wrapper starts the binary under test
 export GITS_DEMO_WORK="${DEMO}"
 export GITS_DEMO_BIN="${BIN}"
-if [[ -f "${_ROOT}/submodules/encrypt/typescript/dist/ssenc.node.ts" ]]; then
-  export GITS_DEMO_ENCRYPT="${_ROOT}/submodules/encrypt"
-fi
 
 # the storage of the demo, seen from the test
 SRC="${DEMO}/gits_source"

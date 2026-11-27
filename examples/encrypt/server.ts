@@ -18,14 +18,26 @@
  * A path is written like a JSON string. The reply is sent only after the output file is written:
  * gits waits for it, so when gits reads "ok" the file is there.
  *
- * The server decides nothing about a file: text or binary is detected by the library (mode "auto").
- * The encryption itself is the library of https://github.com/stopsopa/encrypt with an ssh key held
- * by ssh-agent.
+ * The server doesn't encrypt by itself either: for every request it starts the program "ssenc"
+ * (the Rust binary of https://github.com/stopsopa/encrypt, where it is: GITS_DEMO_SSENC) with the
+ * two files and the ssh key, waits for it, and turns its exit code into the reply:
+ *
+ *   encode   ssenc encrypt --mode auto --ssh-key <key>.pub -i <plain> -o <encrypted>
+ *   decode   ssenc decrypt --ssh-key <key>.pub -i <encrypted> -o <plain>
+ *   rekey    ssenc rekey --ssh-key <key>.pub --new-ssh-key <new key>.pub -i <encrypted> -o <encrypted>
+ *   rewrap   the same with --rewrap-only
+ *
+ * So the server decides nothing about a file: text or binary is detected by ssenc (--mode auto),
+ * and an encrypted file which is already at the output is reused by it (only edited lines change).
+ * The private key stays in the ssh-agent of SSH_AUTH_SOCK: ssenc asks it.
+ *
+ * This file is not run directly: examples/encrypt/encrypt.sh turns it (esbuild) into server.js.
  *
  * Usage (started by examples/encrypt/start.sh, which defines the variables from examples/encrypt/env.sh):
  *
- *   node examples/encrypt/server.ts          the server: listens until it is killed
- *   node examples/encrypt/server.ts test     a client: encrypts a file through the socket, decrypts it
+ *   /bin/bash examples/encrypt/encrypt.sh    server.ts -> server.js, and a copy of ssenc in bin/
+ *   node examples/encrypt/server.js          the server: listens until it is killed
+ *   node examples/encrypt/server.js test     a client: encrypts a file through the socket, decrypts it
  *                                            and compares. Exit code 0 when the server works
  *
  * Env vars:
@@ -33,20 +45,21 @@
  *   GITS_DEMO_SSH_KEY        private key file (required); <file>.pub is read, the private one
  *                            has to be loaded in the agent of SSH_AUTH_SOCK
  *   GITS_DEMO_NEW_SSH_KEY    the same for the key files get by rekey / rewrap (optional)
- *   GITS_DEMO_ENCRYPT        checkout of the encrypt repository (required)
+ *   GITS_DEMO_SSENC          the ssenc binary (required): a path, or a name found in PATH
  *
  * What it prints is the log: "encrypted <file> -> <file>", "decrypted ...", "rekeyed ...", "rewrapped ...".
  *
  * The file from top to bottom:
  *   1. the request:  parse()                                  one line -> command, input, output
- *   2. the work:     encode(), decode(), rekey()              one function for each command
+ *   2. the work:     ssenc(), encode(), decode(), rekey()     one function for each command, each starts ssenc
  *   3. the reply:    handle()                                 runs the work, builds "ok ..." / "error ..."
  *   4. the socket:   server()                                 listens, calls handle() for every line
  *   5. the test:     ask(), test()                            a client of the server above
  *
- * Run by Node directly (native type stripping, no flags, Node.js >= 22.18).
+ * server.js is plain JavaScript, for Node.js >= 22.18.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -97,69 +110,78 @@ function parse(line: string): Request {
 
 // ---------------------------------------------------------------- 2. the work
 
-/** The library. Loaded when the first request comes, then reused. */
-function library() {
-  return import(`${env("GITS_DEMO_ENCRYPT")}/typescript/dist/ssenc.node.ts`);
+/** An error of ssenc, with its kind for the reply: USAGE, AUTH, MALFORMED or ENV. */
+class SsencError extends Error {
+  kind: string;
+
+  constructor(kind: string, message: string) {
+    super(message);
+
+    this.kind = kind;
+  }
 }
 
-/** A key for the library: the public part from <file>.pub, the private one stays in the ssh-agent. */
-function sshKey(file: string) {
-  return {
-    type: "ssh",
-    publicKey: readFileSync(`${file}.pub`, "utf8"),
-  };
+// exit codes of ssenc. 0: done, the whole output was written
+const KINDS: Record<number, string> = {
+  1: "USAGE",
+  2: "AUTH", // the key doesn't open the file, or the file was modified
+  3: "MALFORMED", // not an encrypted file at all
+  4: "ENV", // no ssh-agent, or the key is not in it
+};
+
+/** Starts ssenc with the arguments and waits for its end. On an error nothing is written to the output. */
+function ssenc(args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(env("GITS_DEMO_SSENC"), args, (error, _stdout, stderr) => {
+      if (!error) {
+        resolve();
+
+        return;
+      }
+
+      if (typeof error.code !== "number") {
+        reject(new SsencError("ENV", `can't start GITS_DEMO_SSENC=>${env("GITS_DEMO_SSENC")}<: ${error.message}`));
+
+        return;
+      }
+
+      // stderr of ssenc: "ssenc: <KIND>: <message>"
+      const message = stderr.trim().replace(/^ssenc: [A-Z]+: /, "");
+
+      reject(new SsencError(KINDS[error.code] ?? "USAGE", message));
+    });
+  });
 }
 
-/** The key which encrypts, and which opens what is stored. */
-const currentKey = () => sshKey(env("GITS_DEMO_SSH_KEY"));
+/** The key which encrypts, and which opens what is stored: its public part, a file for ssenc. */
+const currentKey = () => `${env("GITS_DEMO_SSH_KEY")}.pub`;
 
 /** The key the stored files get by rekey / rewrap. */
-function newKey(command: Command) {
+function newKey(command: Command): string {
   if (!process.env.GITS_DEMO_NEW_SSH_KEY) {
     throw th(`${command}: the server was started without GITS_DEMO_NEW_SSH_KEY`);
   }
 
-  return sshKey(process.env.GITS_DEMO_NEW_SSH_KEY);
+  return `${process.env.GITS_DEMO_NEW_SSH_KEY}.pub`;
 }
 
-const isEncrypted = (content: Buffer) => content.subarray(0, 8).toString("latin1") === "#ssenc1 ";
-
-async function encode({ input, output }: Request): Promise<void> {
-  const { encrypt } = await library();
-
-  const options: { mode: "auto"; previous?: Buffer } = { mode: "auto" };
-
-  // an encrypted file which is already there is reused: only the edited lines change in it
-  if (existsSync(output)) {
-    const previous = readFileSync(output);
-
-    if (isEncrypted(previous)) {
-      options.previous = previous;
-    }
-  }
-
-  const encrypted = await encrypt(readFileSync(input), currentKey(), options);
-
-  writeFileSync(output, encrypted);
+function encode({ input, output }: Request): Promise<void> {
+  return ssenc(["encrypt", "--mode", "auto", "--ssh-key", currentKey(), "-i", input, "-o", output]);
 }
 
-async function decode({ input, output }: Request): Promise<void> {
-  const { decrypt } = await library();
-
-  const plain = await decrypt(readFileSync(input), currentKey());
-
-  writeFileSync(output, plain);
+function decode({ input, output }: Request): Promise<void> {
+  return ssenc(["decrypt", "--ssh-key", currentKey(), "-i", input, "-o", output]);
 }
 
 /** rekey: everything encrypted again. rewrap: only the key lines at the top replaced. */
-async function rekey({ command, input, output }: Request): Promise<void> {
-  const { rekey } = await library();
+function rekey({ command, input, output }: Request): Promise<void> {
+  const args = ["rekey", "--ssh-key", currentKey(), "--new-ssh-key", newKey(command)];
 
-  const options = { rotateDataKey: command === "rekey" };
+  if (command === "rewrap") {
+    args.push("--rewrap-only");
+  }
 
-  const encrypted = await rekey(readFileSync(input), currentKey(), newKey(command), options);
-
-  writeFileSync(output, encrypted);
+  return ssenc([...args, "-i", input, "-o", output]);
 }
 
 const WORK: Record<Command, { run: (request: Request) => Promise<void>; done: string }> = {
@@ -184,8 +206,8 @@ export async function handle(line: string): Promise<string> {
 
     return `ok ${request.command} ${JSON.stringify(request.output)}`;
   } catch (e) {
-    // the library gives a kind to its errors (USAGE, AUTH, MALFORMED, ENV): it tells gits
-    // e.g. that a file is not encrypted at all, or that the key doesn't open it
+    // the kind (USAGE, AUTH, MALFORMED, ENV) tells gits e.g. that a file is not encrypted
+    // at all, or that the key doesn't open it
     const error = e as Error & { kind?: string };
 
     const kind = error.kind ?? "USAGE";
@@ -288,7 +310,7 @@ export async function test(): Promise<void> {
       throw th(`the server replied >${failed}<`);
     }
 
-    if (!isEncrypted(readFileSync(encrypted))) {
+    if (!readFileSync(encrypted, "utf8").startsWith("#ssenc1 ")) {
       throw th("the file was not encrypted");
     }
 

@@ -324,7 +324,9 @@ Not in the original. `GITS_START=<script>`: the counterpart of `GITS_EXIT`.
 A self-contained demo of encryption which lives exactly as long as one gits command:
 `examples/encrypt/gits.sh` (wrapper) registers `examples/encrypt/start.sh` in `GITS_START` and
 `examples/encrypt/stop.sh` in `GITS_EXIT`. `start.sh` starts an ssh-agent of its own with the demo key
-and `examples/encrypt/server.ts` (the simplest server of the socket protocol) and tests the encryption
+and `examples/encrypt/server.js` (the simplest server of the socket protocol: `server.ts` turned into JavaScript by
+`examples/encrypt/encrypt.sh`; for every request it starts the Rust binary `ssenc` of the encrypt
+repository, `GITS_DEMO_SSENC`) and tests the encryption
 through the socket before gits goes on. All variables: `examples/encrypt/env.sh`, the key: `examples/encrypt/keys.sh`.
 `examples/encrypt/reset_setup.sh` brings the demo to its state 0: a local storage
 (`examples/encrypt/gits_source`, the `GITS_SOURCE` of the demo, set in `env.sh` whatever the terminal has)
