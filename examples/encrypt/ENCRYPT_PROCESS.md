@@ -7,17 +7,23 @@ socket. Here that process lives only as long as one `gits` command:
 ```
 /bin/bash examples/encrypt/gits.sh diff
         |
-        |  defines the env vars (env.sh), starts the gits binary
+        |  defines the env vars (env.sh), GITS_ALL=start.sh, GITS_EXIT=stop.sh, starts the gits binary
         v
-      gits ---- event START ----> start.sh   ssh-agent with the key + server.ts on the socket
-        |                                    + a test: a file encrypted, decrypted, compared.
-        |                                    gits waits. A failure stops gits.
+      gits ---- GITS_ALL -------> start.sh START   ssh-agent with the key + server.ts on the socket
+        |       (first event)                      + a test: a file encrypted, decrypted, compared.
+        |                                          gits waits. A failure stops gits.
         |
         |  ... the command itself: encode / decode requests to the socket ...
+        |      (start.sh is called for every next event too, and does nothing)
         |
-        +------ GITS_EXIT ------> stop.sh    server and agent stopped, sockets removed.
-                                             Always: also after an error, Ctrl+C, kill.
+        +------ GITS_EXIT ------> stop.sh          server and agent stopped, sockets removed.
+                                                   Always: also after an error, Ctrl+C, kill.
 ```
+
+`START` is not a variable: it is the name of the first event of every command, the first argument
+`start.sh` gets. `GITS_ALL` is the script of every event of every command, so one variable is enough
+here; the variable of that one event alone would be `GITS_DIFF_START`, `GITS_PUSH_START`, ... one
+for each command (see `gits --help`).
 
 Everything is in `examples/encrypt/`:
 
