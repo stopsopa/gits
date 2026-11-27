@@ -133,10 +133,9 @@ is never contacted: gits only takes the name of the directory in the storage fro
 | Variable | Default | |
 |---|---|---|
 | `GITS_SOURCE` | `examples/encrypt/gits_source` | **the storage.** gits reads it. Always the one of the demo: `GITS_SOURCE` of your terminal (your real storage) is ignored, the demo can't push there. Another one: `GITS_DEMO_SOURCE` |
-| `GITS_ENCRYPTION_SOCKET` | `examples/encrypt/tmp/ssenc.sock` | **the socket.** gits reads it: where it sends its requests. At most about 100 characters |
+| `GITS_ENCRYPTION_SOCKET` | `examples/encrypt/tmp/ssenc.sock` | **the socket.** gits reads it: where it sends its requests. At most about 100 characters. Defined as an empty text (`GITS_ENCRYPTION_SOCKET= /bin/bash gits.sh ...`): no socket, the wrapper starts gits without it and without `start.sh` / `stop.sh` |
 | `GITS_DEMO_SSH_KEY` | `key` = `examples/encrypt/tmp/key` | the ssh key which encrypts and which opens what is stored (private key file, the public one is `<file>.pub`). Only `start.sh` and `server.ts` use it. A name without a directory is a file in `tmp/`: `GITS_DEMO_SSH_KEY=key2` |
 | `GITS_DEMO_NEW_SSH_KEY` | not defined | only for `gits crypt rekey`: the key the stored files get in place of `GITS_DEMO_SSH_KEY` |
-| `GITS_DEMO_NO_SOCKET` | not defined | `1`: the wrapper starts gits without `GITS_ENCRYPTION_SOCKET` and without `start.sh` / `stop.sh` |
 | `GITS_DEMO_LOG` | `examples/encrypt/server.log` | log of the server. Empty (`GITS_DEMO_LOG=""`): no log |
 | `GITS_DEMO_AGENT` | `examples/encrypt/tmp/agent.sock` | socket of the ssh-agent of the demo |
 | `GITS_DEMO_SSENC` | `examples/encrypt/bin/ssenc` | the binary `server.js` starts for every request: `rust/target/release/ssenc` of the encrypt repository. A path, or a name found in `PATH` (`GITS_DEMO_SSENC=ssenc` when you installed it) |
@@ -293,14 +292,15 @@ cd examples/encrypt                       # skip when you are already there
 /bin/bash reset_setup.sh
 ```
 
-**No socket: `:e:` is ignored.** `GITS_DEMO_NO_SOCKET=1` makes the wrapper start gits without
-`GITS_ENCRYPTION_SOCKET` (and without `start.sh` / `stop.sh`):
+**No socket: `:e:` is ignored.** `GITS_ENCRYPTION_SOCKET=` in front of the wrapper defines the
+variable as an empty text for that one command: gits runs without the socket, and the wrapper
+starts neither `start.sh` nor `stop.sh`:
 
 ```sh
 cd repoa
-GITS_DEMO_NO_SOCKET=1 /bin/bash ../gits.sh push --yes     # ':e:' is ignored, files are transported as they are
+GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh push --yes   # ':e:' is ignored, files are transported as they are
 cat "../gits_source/git@github.com:demo__repoa.git/.env"  # plain text
-GITS_DEMO_NO_SOCKET=1 /bin/bash ../gits.sh diff           # files are in sync
+GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh diff         # files are in sync
 cd ..
 ```
 
@@ -329,7 +329,7 @@ not by the server.
 
 ```sh
 cd repoa
-GITS_DEMO_NO_SOCKET=1 /bin/bash ../gits.sh diff           # ... is stored encrypted but env var GITS_ENCRYPTION_SOCKET is not defined
+GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh diff         # ... is stored encrypted but env var GITS_ENCRYPTION_SOCKET is not defined
 cd ..
 ```
 
@@ -342,7 +342,7 @@ it belongs to:
 cat "gits_source/git@github.com:demo__repoa.git/.env"                         # plain text again
 cmp repob/secrets/cert.bin "gits_source/git@github.com:demo__repob.git/secrets/cert.bin" && echo identical
 git -C gits_source log --oneline                  # gits crypt decrypt (storage, 4 files)
-(cd repoa && GITS_DEMO_NO_SOCKET=1 /bin/bash ../gits.sh diff)    # works without the socket again
+(cd repoa && GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh diff)    # works without the socket again
 ```
 
 **Encrypt everything again, with the other key.** `all`: the `:e:` elements of every project

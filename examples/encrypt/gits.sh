@@ -15,8 +15,9 @@
 #                            gits waits for it, and a failure stops gits
 #   GITS_EXIT=stop.sh        the last thing of every start of gits, however it ends
 #
-# GITS_DEMO_NO_SOCKET=1 /bin/bash examples/encrypt/gits.sh push --yes
-#   gits without GITS_ENCRYPTION_SOCKET and without the two scripts: ':e:' is ignored
+# GITS_ENCRYPTION_SOCKET= /bin/bash examples/encrypt/gits.sh push --yes
+#   the socket defined as an empty text: gits without the socket and without the two scripts,
+#   ':e:' is ignored
 #
 # All variables: env.sh
 #
@@ -45,9 +46,10 @@ fi
 # a clone kept by your own setup belongs to your real storage, not to the storage of the demo
 unset GITS_PULL_TO_SYNC
 
-if [[ -n "${GITS_DEMO_NO_SOCKET}" ]]; then
-  # gits as if there was no encoder process at all: it ignores ':e:', nothing is started
-  unset GITS_ENCRYPTION_SOCKET
+if [[ -z "${GITS_ENCRYPTION_SOCKET}" ]]; then
+  # "GITS_ENCRYPTION_SOCKET= gits.sh ...": gits as if there was no encoder process at all,
+  # it ignores ':e:', nothing is started. (the old name of the variable would be read in its place)
+  unset GITS_ENCRYPTION_SOCKET GITSTORAGETENCRYPTIONSOCKET
 else
   export GITS_START="${_DIR}/start.sh"
   export GITS_EXIT="${_DIR}/stop.sh"

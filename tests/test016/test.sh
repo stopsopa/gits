@@ -81,7 +81,7 @@ function w {
 
 # the same wrapper, but gits gets no GITS_ENCRYPTION_SOCKET and nothing is started
 function plain {
-  GITS_DEMO_NO_SOCKET=1 w "${@}"
+  GITS_ENCRYPTION_SOCKET= w "${@}"
 }
 
 # form <file in the storage>: how it is stored

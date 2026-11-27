@@ -24,7 +24,9 @@ export GITS_SOURCE="${GITS_DEMO_SOURCE}"
 
 # The second variable gits reads: the unix socket it sends encode / decode requests to.
 # start.sh starts the server on it, stop.sh removes it. At most about 100 characters.
-export GITS_ENCRYPTION_SOCKET="${GITS_ENCRYPTION_SOCKET:-${GITS_DEMO_TMP}/ssenc.sock}"
+# Defined as an empty text: no socket. gits.sh starts gits without it (and starts no server):
+#   GITS_ENCRYPTION_SOCKET= /bin/bash gits.sh push --yes
+export GITS_ENCRYPTION_SOCKET="${GITS_ENCRYPTION_SOCKET-${GITS_DEMO_TMP}/ssenc.sock}"
 
 # The ssh key everything is encrypted with and which opens what is stored: the private key file,
 # its public key is next to it (<file>.pub). Read only by start.sh (loads it into the agent) and

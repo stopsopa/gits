@@ -159,14 +159,14 @@ Lifecycle: the command is `crypt` (`GITS_CRYPT_START`, ... 14 events, no events 
 | `src/ops.rs` | `without_socket`: the table "What `:e:` does" for diff, isinsync, push, pull, state |
 | `src/events.rs`, `src/main.rs` | command `crypt`: events, arguments, `--help` |
 | `examples/encrypt/server.ts` | `rekey`, `rewrap`, `GITS_DEMO_NEW_SSH_KEY`, `mode: "auto"` |
-| `examples/encrypt/env.sh`, `keys.sh`, `start.sh`, `gits.sh`, `reset_setup.sh` | two keys (`key`, `key2`), a key by its name, the new key in the agent, `GITS_DEMO_NO_SOCKET`, `GITS_DEMO_WORK`, a binary file in `repob` |
+| `examples/encrypt/env.sh`, `keys.sh`, `start.sh`, `gits.sh`, `reset_setup.sh` | two keys (`key`, `key2`), a key by its name, the new key in the agent, an empty `GITS_ENCRYPTION_SOCKET` = no socket, `GITS_DEMO_WORK`, a binary file in `repob` |
 | `tests/test016` | both sequences below, 34 checks |
 | docs | `README.md` (9. Encrypted files), `gits --help`, `LIFECYCLE.md`, `CHANGES.md`, `ENCRYPT_PROCESS.md` |
 
 ## Try it by hand
 
 Everything from `examples/encrypt`. `/bin/bash gits.sh` is gits with the server started and
-stopped around every command; `GITS_DEMO_NO_SOCKET=1` in front of it: gits without the socket.
+stopped around every command; `GITS_ENCRYPTION_SOCKET=` (empty) in front of it: gits without the socket.
 
 ### A. plain, encrypted, the whole storage decrypted, encrypted with another key
 
@@ -176,7 +176,7 @@ cd examples/encrypt
 
 # no socket: ':e:' is ignored
 cd repoa
-GITS_DEMO_NO_SOCKET=1 /bin/bash ../gits.sh push --yes
+GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh push --yes
 cat "../gits_source/git@github.com:demo__repoa.git/.env"  # plain text
 
 # the socket appears
@@ -189,12 +189,12 @@ cd ..
 /bin/bash gits.sh crypt status all                        # encrypted: 4, the fingerprint of key
 
 # no socket + stored encrypted: an error
-(cd repoa && GITS_DEMO_NO_SOCKET=1 /bin/bash ../gits.sh diff)
+(cd repoa && GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh diff)
 
 # decrypt the entire storage
 /bin/bash gits.sh crypt decrypt --storage --yes
 cat "gits_source/git@github.com:demo__repoa.git/.env"     # plain text again
-(cd repoa && GITS_DEMO_NO_SOCKET=1 /bin/bash ../gits.sh diff)    # works without the socket again
+(cd repoa && GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh diff)    # works without the socket again
 
 # encrypt again, with the other key
 GITS_DEMO_SSH_KEY=key2 /bin/bash gits.sh crypt encrypt all --yes
