@@ -360,3 +360,16 @@ The design and the decisions: `examples/encrypt/ENCRYPT_IN_GITS_PLAN.md`.
   `GITS_DEMO_WORK`, a binary file in `repob`, mode `auto` (the library decides lines / blob),
   steps 6 and 7 of `ENCRYPT_PROCESS.md`
 - test: `tests/test016` (runs the demo in `tests/test016/tmp/demo`)
+
+# gits --env [export]
+
+- **`gits --env`** prints the env vars of gits which are defined in the environment and change
+  something, one per line as `NAME=value`; **`gits --env export`** as `export NAME=value`. Both
+  can be read back by a shell: `eval "$(gits --env export)"` (`src/main.rs`, `env_set`, `env_lines`)
+- not listed: not defined or empty, the value of the default (`GITS_SHELL=/bin/bash`,
+  `GITS_CONFIRM=true`), an old name (`GITSTORAGE...`) when the new one is defined too, `HOME`,
+  `NO_COLOR`, and what is defined only in `.git/gits.sh`
+- the value is the one gits uses (spaces at the ends removed), in single quotes when a shell
+  would change it. The order is the one of the table of `gits --help`
+- works without `GITS_SOURCE`; nothing defined: nothing printed, exit code 0
+- test: `tests/test017`

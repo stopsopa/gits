@@ -456,6 +456,26 @@ and one variable per lifecycle event) in three columns:
 2. the default
 3. what gits ends up using. An empty value counts as not defined, so the default is used
 
+Only the ones which are defined and change something, in a form a shell can read back:
+
+```sh
+gits --env             # GITS_SOURCE=git@github.com:owner/storage.git
+gits --env export      # export GITS_SOURCE=git@github.com:owner/storage.git
+
+eval "$(gits --env export)"
+```
+
+One line per variable, in the order of the table of `gits --help`, with the value gits uses
+(spaces at the ends removed, quoted in single quotes when a shell would change it). Not listed:
+
+- a variable which is not defined or empty (the same for gits)
+- one which has the value of its default (`GITS_SHELL=/bin/bash`, `GITS_CONFIRM=true`)
+- a name from before the rename (`GITSTORAGE...`) when the new one is defined too: gits ignores it.
+  Defined alone it is listed, under the old name
+- variables of other programs (`HOME`, `NO_COLOR`) and what is defined in `.git/gits.sh`
+
+Nothing is defined: nothing is printed, exit code 0.
+
 | Variable | Default | |
 | --- | --- | --- |
 | `GITS_SOURCE` | required | the storage, e.g. `git@github.com:stopsopa/gitstorage.git`. Checked before anything else; only `--help`, `--version`, `events` and `--update` work without it |

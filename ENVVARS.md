@@ -38,3 +38,6 @@ The old names (GITSTORAGE...) are still read when the new one is not defined.
 
 The full list of what gits reacts to, with the value of each in your shell, its default and
 the value gits ends up using: gits --help
+
+Only the ones which are defined and differ from the default, as NAME=value or export NAME=value
+(for eval "$(gits --env export)"): gits --env, gits --env export

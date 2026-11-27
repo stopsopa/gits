@@ -306,7 +306,64 @@ GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh diff         # files are in sync
 cd ..
 ```
 
-**The socket appears.** What is stored plain still works, and `gits crypt status` shows the form:
+**The socket appears.** What is stored plain still works, and `gits crypt status` shows the form.
+
+What `/bin/bash ../gits.sh crypt encrypt --yes` does, step by step. It works only on the storage
+(`GITS_SOURCE`), never directly in it: on a clone of it, which is pushed back at the end. So it is
+the same for a storage which is a directory on this machine (this demo) and one on GitHub.
+
+1. **The wrapper and `start.sh`.** `gits.sh` defines the variables and starts the real binary;
+   gits runs `start.sh` (`GITS_START`) first: agent with the key, server, socket. Not part of
+   gits itself: with your own setup the socket just has to be there.
+2. **The config of the project.** gits looks for `.git/gits.sh` of the repository you are in
+   (`repoa`) and executes it, to get `GITS_LIST`. No config: an error, nothing else happens.
+3. **The `:e:` elements.** From the list only the elements `SOURCE:e:TARGET` are taken, and
+   of each only the TARGET: the path of the file in the storage
+   (`git@github.com:demo__repoa.git/.env`). SOURCE, the local file (`repoa/.env`), is not
+   used from here on: it is not read, not compared, not changed. It doesn't even have to exist.
+4. **The clone.** gits clones `GITS_SOURCE` (`git clone`, whatever the address is: a directory
+   or `git@github.com:...`) to a directory with a random name in the current directory. With
+   GitHub this is the moment the files are downloaded. Everything below happens in that clone.
+5. **The form of every target.** For each TARGET gits opens the file in the clone and reads its
+   beginning: text which starts with `#ssenc1 lines|blob ...` and `#slot ...` lines is
+   *encrypted*, any other file is *plain*, no file is *missing* (never pushed). No key and no
+   socket is needed for that.
+6. **What is to do.** Only the *plain* ones. Encrypted and missing ones are skipped. Nothing
+   plain: `nothing to do`, exit code 0, the clone is removed.
+7. **Without `--yes` it ends here**: the list of the files is printed, exit code 1, nothing is
+   changed.
+8. **The socket.** With `--yes`, `GITS_ENCRYPTION_SOCKET` has to be defined and somebody has
+   to answer on it, otherwise it is an error (there is no "go on without encryption" here, unlike
+   push: encrypting is the only thing this command does).
+9. **One request per file.** For each plain file, in the clone: the file is moved aside
+   (`.env` -> a temporary name next to it), and gits sends
+   `encode "<clone>/.../<temporary name>" "<clone>/.../.env"` through the socket and waits for
+   the reply. The server starts `ssenc encrypt`, which reads the first file and writes the
+   encrypted one in the place of the original. `ok`: the plain copy is removed. `error`: the
+   plain file is moved back, gits stops, the clone is removed, **nothing was pushed**, so the
+   storage is as it was (also the files which were already encrypted in the clone).
+10. **One commit.** `git add -A` and `git commit -m "gits crypt encrypt (project, 1 files)"`
+    in the clone.
+11. **One push.** `git push origin HEAD`: to the directory `gits_source` in this demo, to GitHub
+    when `GITS_SOURCE` points there. Only now the storage changes.
+12. **Cleaning.** The clone is removed, `stop.sh` (`GITS_EXIT`) stops the server and the agent.
+
+Compared with `/bin/bash ../gits.sh push --yes`: steps 1, 2, 4, 10, 11 and 12 are the same. The
+difference is what gets into the clone between them:
+
+- `push` takes **every** element of the list (`::` and `:e:`), and copies the **local** file
+  (SOURCE) over the one in the clone (through `encode` for `:e:`, a plain copy for `::`). So the
+  storage ends up with what you have locally.
+- `crypt encrypt` takes only the `:e:` elements, and encrypts the file **which is already in the
+  clone**. The storage ends up with the same content as before, in the other form. Local changes
+  you didn't push stay local.
+
+When the local files are the same as the stored ones, both give the same result.
+
+Encrypting changes only the newest commit of the storage: the plain version of the file is still
+in its git history (`git -C gits_source log -p`), on GitHub too.
+
+The commands:
 
 ```sh
 cd repoa

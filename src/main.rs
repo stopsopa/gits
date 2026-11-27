@@ -239,6 +239,62 @@ fn env_rows() -> Vec<Row> {
     rows
 }
 
+/**
+ * A value as a word of a shell: as it is when it has only characters which mean nothing to
+ * a shell, in single quotes otherwise ("~" is quoted too: eval would expand it).
+ */
+fn shell_word(value: &str) -> String {
+    let plain = !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "_@%+=:,./-".contains(c));
+    if plain {
+        return value.to_string();
+    }
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+/**
+ * gits --env: the variables which are defined in the environment AND change something, with the
+ * value gits uses (spaces at the ends removed). Not listed: a variable which is not defined or
+ * empty (the same for gits), one with the value of its default, an old name when the new one
+ * is defined (ignored). In the order of the table of --help.
+ */
+fn env_set() -> Vec<(String, String)> {
+    let mut out = Vec::new();
+
+    for v in VARS.iter() {
+        // under the name it was found: the new one, else the one from before the rename
+        if let Some((value, from)) = env_named(v.name) {
+            if value != v.default {
+                out.push((from, value));
+            }
+        }
+    }
+
+    let mut names = vec![
+        events::ENV_RUNNING.to_string(),
+        events::ENV_START.to_string(),
+        events::ENV_EXIT.to_string(),
+    ];
+    names.extend(events::variables().into_iter().map(|(name, _)| name));
+    for name in names {
+        if let Some(value) = util::env(&name) {
+            out.push((name, value));
+        }
+    }
+    out
+}
+
+// one line per variable: NAME=value, or export NAME=value. For eval "$(gits --env export)"
+fn env_lines(export: bool) -> String {
+    let prefix = if export { "export " } else { "" };
+    env_set()
+        .iter()
+        .map(|(name, value)| format!("{prefix}{name}={}\n", shell_word(value)))
+        .collect()
+}
+
 // variable with its value in the shell | default | the value gits uses
 fn env_table() -> String {
     let rows = env_rows();
@@ -407,6 +463,11 @@ The tool itself:
 
   gits --help
   gits --version
+  gits --env               the env vars of gits which are defined and change something (not
+                           defined, empty or equal to the default: not listed), one per line:
+                           NAME=value
+  gits --env export        the same as: export NAME=value
+                           both can be given to a shell: eval "$(gits --env export)"
   gits --update            update to the latest release
   gits --update <tag>      install the given release (also an older one), e.g. v0.1.0
   gits --update --check    only say whether there is something newer, change nothing
@@ -498,6 +559,21 @@ fn run() -> i32 {
         }
         "--version" => {
             println!("gits {VERSION}");
+            return 0;
+        }
+        "--env" => {
+            let export = match args.get(1).map(|s| s.as_str()) {
+                None => false,
+                Some("export") if args.len() == 2 => true,
+                _ => {
+                    eprintln!(
+                        "{}",
+                        red("gits error: --env takes nothing or 'export': gits --env, gits --env export")
+                    );
+                    return 1;
+                }
+            };
+            print!("{}", env_lines(export));
             return 0;
         }
         "events" => {

@@ -33,6 +33,7 @@
 # test015   GITS_PULL_TO_SYNC: the clone of the storage kept in one directory between the runs
 # test016   gits crypt (status, encrypt, decrypt, rekey) and gits without the socket, through the
 #           demo examples/encrypt: reset_setup.sh, the wrapper gits.sh, two keys
+# test017   gits --env [export]: the env vars which are defined and differ from the default
 #
 
 CODE=0
@@ -216,6 +217,16 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test016/test.sh || CODE=1
+
+hide_configs
+
+cat <<EEE
+
+=============== tests/test017/test.sh ===============
+
+EEE
+
+/bin/bash tests/test017/test.sh || CODE=1
 
 hide_configs
 
