@@ -1,6 +1,7 @@
 mod cli;
 mod commands;
 mod config;
+mod crypt;
 mod events;
 mod menu;
 mod ops;
@@ -58,7 +59,7 @@ const VARS: [Var; 7] = [
         default: "",
         required: false,
         unset: "(not used: elements SOURCE:e:TARGET can't be handled)",
-        about: "unix socket of the encoder process, needed only for elements SOURCE:e:TARGET",
+        about: "unix socket of the encoder process. Not defined: :e: is ignored, files are stored as they are",
     },
     Var {
         name: commands::ENV_TEMPLATE,
@@ -347,12 +348,43 @@ In the root of a project (the directory with .git):
                           find config -type f | gits add -e
                         -e: register the files as encrypted elements, SOURCE:e:TARGET instead
                         of SOURCE::TARGET: push encrypts such a file before it is stored, pull
-                        and diff decrypt it (needs GITS_ENCRYPTION_SOCKET). With the list -e
+                        and diff decrypt it (see "Encryption" below). With the list -e
                         only ticks the box "enc" of every row at the start
   gits move <old remote> <new remote>
                         print the procedure of renaming the directory in the storage after
                         the remote 'origin' of the project changed
   gits migrate          .git/gitstorage-config.sh -> .git/gits.sh (also done automatically when needed)
+
+Encryption (elements SOURCE:e:TARGET):
+
+  gits never encrypts by itself: it sends requests to the encoder process listening on the
+  unix socket GITS_ENCRYPTION_SOCKET. Which key encrypts is the business of that process.
+
+  GITS_ENCRYPTION_SOCKET not defined:
+                        ':e:' is ignored, files are transported as they are (like '::').
+                        Only a file which is already stored encrypted is an error.
+  GITS_ENCRYPTION_SOCKET defined:
+                        push encrypts, pull and diff decrypt. A ':e:' file which is still
+                        stored plain is used as it is, and encrypted by the next push.
+
+  The form of what is already in the storage (only the storage is changed: one commit, one push):
+
+  gits crypt status            every ':e:' file: stored encrypted (and the keys which open it:
+                               fingerprints of ssh keys), plain, or not stored yet. Needs no socket
+  gits crypt encrypt --yes     ':e:' files stored plain -> encrypted
+  gits crypt decrypt --yes     files stored encrypted -> plain; the rest is left as it is
+  gits crypt rekey --yes       files stored encrypted -> the new keys of the encoder process
+                               (it has to be started with them), everything is encrypted again
+  gits crypt rekey --rewrap-only --yes
+                               only the key lines at the top of each file change
+
+    scope, after the verb:
+      (nothing)    the ':e:' elements of this project (.git/gits.sh)
+      all          the ':e:' elements of every project below the current directory
+      --storage    every file of the storage which is encrypted, whatever config it belongs to,
+                   also projects which are not on this machine (not for encrypt)
+    Without --yes: only the list of files which would change, exit code 1.
+    A file is an encrypted one when it is text and starts with the lines '#ssenc1 ...' + '#slot ...'.
 
 Everything which needs the storage clones it to a directory with a random name in the current
 directory and removes it at the end.
@@ -426,6 +458,7 @@ fn dispatch(
         "push" => ops::push(&ctx, yes),
         "pull" => ops::pull(&ctx, yes),
         "url" => ops::url(&ctx),
+        "crypt" => crypt::run(&ctx, rest, yes),
         "init" => commands::init(&ctx),
         "add" => commands::add(&ctx, rest, encrypt, yes),
         "move" => commands::mv(&ctx, rest),
@@ -485,6 +518,8 @@ fn run() -> i32 {
             match arg.as_str() {
                 "--yes" => yes = true,
                 "-e" | "--encrypt" => encrypt = true,
+                // gits crypt has flags of its own
+                "--storage" | "--rewrap-only" if first == "crypt" => positional.push(arg.clone()),
                 flag if flag.starts_with('-') && flag.len() > 1 => {
                     eprintln!(
                         "{}",

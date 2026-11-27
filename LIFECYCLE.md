@@ -200,7 +200,7 @@ How it differs from `END`: `END` belongs to a command (`GITS_PUSH_END`, or all o
 `GITS_ALL`), `GITS_EXIT` is one variable for everything, also for what has no events.
 
 The pair `START` + `GITS_EXIT` is the way to have something running exactly as long as gits:
-[examples/ENCRYPT_PROCESS.md](examples/ENCRYPT_PROCESS.md) starts an encryption server at `START`,
+[examples/encrypt/ENCRYPT_PROCESS.md](examples/encrypt/ENCRYPT_PROCESS.md) starts an encryption server at `START`,
 tests it, and stops it in `GITS_EXIT`.
 
 ## The lifecycle of every command
@@ -463,6 +463,29 @@ one; its `AFTER_PROJECT` has `GITS_EVENT_RESULT=error`.
   [ print the url ]
        END
 ```
+
+### gits crypt status | encrypt | decrypt | rekey
+
+```
+      START  <-- (stop)
+  [ scope "all": find projects ]       FIND (replaceable), FOUND
+  [ this project: execute .git/gits.sh ]
+   CONFIG_LOADED                        (only for the scope "this project")
+  BEFORE_CLONE  <-- (stop)
+  [ git clone of the storage ]
+   AFTER_CLONE
+  [ encode / decode / rekey requests, file by file, inside the clone ]
+  BEFORE_COMMIT  <-- (stop)             (only with --yes, when something changed)
+   AFTER_COMMIT
+  BEFORE_PUSH  <-- (stop)
+   AFTER_PUSH
+  BEFORE_CLEANUP
+   AFTER_CLEANUP
+       END
+```
+
+There are no events per file here. `START` is the place to start an encoder process with the
+right keys, see [examples/encrypt/ENCRYPT_PROCESS.md](examples/encrypt/ENCRYPT_PROCESS.md).
 
 ### gits move
 
@@ -764,6 +787,25 @@ environment is inherited by the script as it is.
 | `GITS_URL_ERROR` | the command failed, its error message was just printed | once, only when the command fails | `$3` error message | `GITS_EVENT_ERROR` the error message |
 | `GITS_URL_END` | the last thing before gits exits, always: also after an error and after Ctrl+C | once | `$3` exit code | `GITS_EVENT_EXIT_CODE` the exit code gits ends with (130 after Ctrl+C) |
 
+### Events of `gits crypt`
+
+| Variable | When | Fired | Arguments after `<EVENT> <command>` | Own env vars |
+|---|---|---|---|---|
+| `GITS_CRYPT_START` | the arguments are read, nothing else happened yet **can stop the command** | once | — | — |
+| `GITS_CRYPT_FIND` | the projects below the current directory have to be found. The script does it: it prints the path of every config (.git/gits.sh, .git/gitstorage-config.sh), one per line. Default: events/defaults/FIND.sh **replaces a default** | once | `$3` directory to search | — |
+| `GITS_CRYPT_FOUND` | the projects are found | once | `$3` number of projects | `GITS_EVENT_FOUND_COUNT` number of projects<br>`GITS_EVENT_FOUND` directories of the projects, relative to GITS_EVENT_PWD, one per line |
+| `GITS_CRYPT_CONFIG_LOADED` | .git/gits.sh was executed: GITS_TARGETDIR and the list are known. From here on the scripts defined in the config run too | once (state: once per project) | — | — |
+| `GITS_CRYPT_BEFORE_CLONE` | the temporary directory exists and is empty, 'git clone' of the storage is next **can stop the command** | once | `$3` temporary directory | — |
+| `GITS_CRYPT_AFTER_CLONE` | the storage is cloned into the temporary directory | once | `$3` temporary directory | — |
+| `GITS_CRYPT_BEFORE_COMMIT` | push --yes: the clone holds what is going to be stored, 'git add' + 'git commit' are next **can stop the command** | once, only when there is something to store | — | — |
+| `GITS_CRYPT_AFTER_COMMIT` | push --yes: the commit exists in the clone, it is not in the storage yet | once, only when there is something to store | `$3` commit hash | `GITS_EVENT_COMMIT` hash of the new commit |
+| `GITS_CRYPT_BEFORE_PUSH` | push --yes: 'git push' to the storage is next. The last moment to stop it **can stop the command** | once, only when there is something to store | `$3` commit hash | `GITS_EVENT_COMMIT` hash of the new commit |
+| `GITS_CRYPT_AFTER_PUSH` | push --yes: the storage has the new commit | once, only when there is something to store | `$3` commit hash | `GITS_EVENT_COMMIT` hash of the new commit |
+| `GITS_CRYPT_BEFORE_CLEANUP` | the temporary directory is about to be removed: the last moment to look into it **can stop the command** | once | `$3` temporary directory | — |
+| `GITS_CRYPT_AFTER_CLEANUP` | the temporary directory is removed | once | `$3` temporary directory | — |
+| `GITS_CRYPT_ERROR` | the command failed, its error message was just printed | once, only when the command fails | `$3` error message | `GITS_EVENT_ERROR` the error message |
+| `GITS_CRYPT_END` | the last thing before gits exits, always: also after an error and after Ctrl+C | once | `$3` exit code | `GITS_EVENT_EXIT_CODE` the exit code gits ends with (130 after Ctrl+C) |
+
 ### Events of `gits move`
 
 | Variable | When | Fired | Arguments after `<EVENT> <command>` | Own env vars |
@@ -801,7 +843,7 @@ environment is inherited by the script as it is.
 | | |
 |---|---|
 | `gits events` | the list of events with what is defined on your machine right now |
-| [events/examples/](events/examples/) | one script per variable (133), each with its whole context documented at the top and a body which works as it is. Written by `gits events --examples <directory>` |
+| [events/examples/](events/examples/) | one script per variable (148), each with its whole context documented at the top and a body which works as it is. Written by `gits events --examples <directory>` |
 | [events/defaults/](events/defaults/) | the default scripts of the replaceable events |
 | [tests/test012/test.sh](tests/test012/test.sh) | registers every variable and dumps what each script sees. After `/bin/bash tests/test012/test.sh` the dumps are in `tests/test012/tmp/dumps/`, one directory per gits command, one file per call |
 | [tests/test013/test.sh](tests/test013/test.sh) | stopping a command, scripts from the config, replacing `FIND`, no recursion |

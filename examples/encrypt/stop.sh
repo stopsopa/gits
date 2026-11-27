@@ -1,12 +1,12 @@
 #
-# Stops what start.sh started (demo examples/ENCRYPT_PROCESS.md): the server examples/server.ts
+# Stops what start.sh started (demo examples/encrypt/ENCRYPT_PROCESS.md): the server examples/encrypt/server.ts
 # and the ssh-agent of the demo, and removes their sockets and pid files.
 # Nothing runs: nothing happens, exit code 0. Prints nothing.
 #
 # gits.sh registers it in GITS_EXIT: gits runs it as the last thing of every start, however
 # it ended (also after an error, Ctrl+C or kill). By hand (from any directory):
 #
-#   /bin/bash examples/stop.sh
+#   /bin/bash examples/encrypt/stop.sh
 #
 # All variables: env.sh
 #

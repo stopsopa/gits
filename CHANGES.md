@@ -253,7 +253,7 @@ project) and waits:
 # --help: every env var, three columns
 
 The table of env vars in `gits --help` lists every variable gits reacts to: its own six, the
-four names from before the rename, `HOME`, `NO_COLOR`, `GITS_EVENT_RUNNING` and the 133 variables
+four names from before the rename, `HOME`, `NO_COLOR`, `GITS_EVENT_RUNNING` and the 148 variables
 of lifecycle events.
 
 - column 1: the name with its value exactly as it is in the shell: `NAME (not defined)`,
@@ -306,10 +306,36 @@ Not in the original. `GITS_EXIT=<script>`: the last thing of every start of gits
 - listed by `gits --help` (table of env vars) and `gits events`
 - code: `src/events.rs` (`exit`), `src/main.rs`; tests: `tests/test013`, `tests/test010` (after Ctrl+C)
 
-# examples/ENCRYPT_PROCESS.md
+# examples/encrypt/ENCRYPT_PROCESS.md
 
 A self-contained demo of encryption which lives exactly as long as one gits command:
-`examples/gits.sh` (wrapper) registers `examples/start.sh` for `START` (through `GITS_ALL`) and
-`examples/stop.sh` in `GITS_EXIT`. `start.sh` starts an ssh-agent of its own with the demo key
-and `examples/server.ts` (the simplest server of the socket protocol) and tests the encryption
-through the socket before gits goes on. All variables: `examples/env.sh`, the key: `examples/keys.sh`.
+`examples/encrypt/gits.sh` (wrapper) registers `examples/encrypt/start.sh` for `START` (through `GITS_ALL`) and
+`examples/encrypt/stop.sh` in `GITS_EXIT`. `start.sh` starts an ssh-agent of its own with the demo key
+and `examples/encrypt/server.ts` (the simplest server of the socket protocol) and tests the encryption
+through the socket before gits goes on. All variables: `examples/encrypt/env.sh`, the key: `examples/encrypt/keys.sh`.
+`examples/encrypt/reset_setup.sh` brings the demo to its state 0: a local storage
+(`examples/encrypt/gits_source`, the `GITS_SOURCE` of the demo, set in `env.sh` whatever the terminal has)
+and two projects (`repoa`, `repob`) with `gits init` and `gits add` already done.
+
+# gits without the socket, gits crypt
+
+The design and the decisions: `examples/encrypt/ENCRYPT_IN_GITS_PLAN.md`.
+
+- **no `GITS_ENCRYPTION_SOCKET`: `:e:` is ignored**, files are transported as they are (it used
+  to be an error for every command). Still an error: a file which is already stored encrypted
+  (`src/ops.rs`, `without_socket`)
+- **a file is an encrypted one** when it is not binary (no NUL byte at its beginning) and starts
+  with `#ssenc1 lines|blob ...` followed by `#slot ...` lines (`src/crypt.rs`, `slots`). No key
+  and no socket needed; the slot lines also give the fingerprints of the keys
+- **`gits crypt status | encrypt | decrypt | rekey`** with the scopes: this project, `all`,
+  `--storage`. `--yes` required to change anything, `--rewrap-only` for rekey. One clone, one
+  commit, one push; a failed request changes nothing in the storage
+- **socket protocol**: two new requests, `rekey "<in>" "<out>"` and `rewrap "<in>" "<out>"`
+  (`src/socket.rs`). Answered by `examples/encrypt/server.ts` when `GITS_DEMO_NEW_SSH_KEY` is
+  defined; not by `submodules/encrypt/examples/socket/server.ts` (not changed)
+- `AUTH` from the encoder process is explained: the file is stored with another key
+- lifecycle: command `crypt` with 14 events (`GITS_CRYPT_*`), 148 event variables in total
+- demo: two keys (`key`, `key2`), `GITS_DEMO_NEW_SSH_KEY`, `GITS_DEMO_NO_SOCKET`,
+  `GITS_DEMO_WORK`, a binary file in `repob`, mode `auto` (the library decides lines / blob),
+  steps 6 and 7 of `ENCRYPT_PROCESS.md`
+- test: `tests/test016` (runs the demo in `tests/test016/tmp/demo`)

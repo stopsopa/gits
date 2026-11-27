@@ -79,7 +79,7 @@ $G --help | --version | --update [TAG|--check]
 | `GITS_ENCRYPTION_SOCKET` | for `:e:` | unix socket of the encoder process | [case 007](#case-007-encrypted_files) |
 | `GITS_TEMPLATE` | no | your template for `init`: file or url | [case 010](#case-010-init_from_your_own_template) |
 | `GITS_SHELL` | no | shell which runs the config and the lifecycle scripts, default `/bin/bash` | [case 006](#case-006-the_config_is_a_shell_script) |
-| `GITS_EXIT` | no | script which runs as the last thing of every start of gits, however it ends | [ENCRYPT_PROCESS.md](ENCRYPT_PROCESS.md) |
+| `GITS_EXIT` | no | script which runs as the last thing of every start of gits, however it ends | [encrypt/ENCRYPT_PROCESS.md](encrypt/ENCRYPT_PROCESS.md) |
 | `GITS_<COMMAND>_<EVENT>`, `GITS_<COMMAND>_ALL`, `GITS_ALL` | no | path of a lifecycle script | [case 012](#case-012-lifecycle_events_your_scripts_between_the_stages) |
 
 ## case-001-first_project_init_and_first_push

@@ -110,9 +110,9 @@ for EXAMPLE in "${_ROOT}"/events/examples/GITS_*.sh; do
   REGISTERED=$((REGISTERED + 1))
 done
 
-# 133 example scripts, 3 of them are FIND
+# 148 example scripts, 4 of them are FIND
 COMMAND='echo "${REGISTERED}"'
-EXPECTED_STDOUT="130"
+EXPECTED_STDOUT="144"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "every variable of every event is registered"

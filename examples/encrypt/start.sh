@@ -1,9 +1,9 @@
 #
-# Starts what gits needs to encrypt and decrypt (demo examples/ENCRYPT_PROCESS.md), and ends
+# Starts what gits needs to encrypt and decrypt (demo examples/encrypt/ENCRYPT_PROCESS.md), and ends
 # only when it works:
 #
 #   1. an ssh-agent of its own, with the key ${GITS_DEMO_SSH_KEY} loaded (your agent is not touched)
-#   2. the server examples/server.ts on the socket ${GITS_ENCRYPTION_SOCKET}
+#   2. the server examples/encrypt/server.ts on the socket ${GITS_ENCRYPTION_SOCKET}
 #   3. a test through that socket: a file is encrypted, decrypted and compared
 #
 # Exit code 0: gits can use the socket. Anything else: an error was printed.
@@ -12,7 +12,7 @@
 # first event of every command: gits waits for this script, and when it fails gits stops.
 # By hand (from any directory), stop it with stop.sh:
 #
-#   /bin/bash examples/start.sh
+#   /bin/bash examples/encrypt/start.sh
 #
 # All variables: env.sh
 #
@@ -57,6 +57,15 @@ ssh-add -q "${GITS_DEMO_SSH_KEY}" || {
   echo "${0} error: ssh-add failed for GITS_DEMO_SSH_KEY=>${GITS_DEMO_SSH_KEY}<"
   exit 1
 }
+
+# rotation (gits crypt rekey): the key the files get has to be in the agent too
+if [[ -n "${GITS_DEMO_NEW_SSH_KEY}" ]]; then
+  ssh-add -q "${GITS_DEMO_NEW_SSH_KEY}" || {
+    echo "${0} error: ssh-add failed for GITS_DEMO_NEW_SSH_KEY=>${GITS_DEMO_NEW_SSH_KEY}<"
+    /bin/bash "${_DIR}/stop.sh"
+    exit 1
+  }
+fi
 
 # 2. The server, in the background. Its output is the log (or nothing).
 NODE_OPTIONS="" nohup node "${_DIR}/server.ts" < /dev/null >> "${GITS_DEMO_LOG:-/dev/null}" 2>&1 &

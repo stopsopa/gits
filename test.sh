@@ -31,6 +31,8 @@
 # test014   add in a terminal: the interactive list (which files, which of them encrypted),
 #           driven through a pseudo terminal by tests/terminal.py (needs python3)
 # test015   GITS_PULL_TO_SYNC: the clone of the storage kept in one directory between the runs
+# test016   gits crypt (status, encrypt, decrypt, rekey) and gits without the socket, through the
+#           demo examples/encrypt: reset_setup.sh, the wrapper gits.sh, two keys
 #
 
 CODE=0
@@ -204,6 +206,16 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test015/test.sh || CODE=1
+
+hide_configs
+
+cat <<EEE
+
+=============== tests/test016/test.sh ===============
+
+EEE
+
+/bin/bash tests/test016/test.sh || CODE=1
 
 hide_configs
 

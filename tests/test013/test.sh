@@ -486,17 +486,17 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "gits events: the list, the defined ones with their value"
 
-# it needs neither the storage nor a project. 133 variables of events and GITS_EXIT
+# it needs neither the storage nor a project. 148 variables of events and GITS_EXIT
 COMMAND='(unset GITS_SOURCE; cd / && "${BIN}" events | grep -c "^  GITS_")'
-EXPECTED_STDOUT="134"
+EXPECTED_STDOUT="149"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
-test "gits events works without GITS_SOURCE: 134 variables"
+test "gits events works without GITS_SOURCE: 149 variables"
 
 # events/examples/ in the repository is generated: it has to be what the binary writes
 COMMAND='gits events --examples "${WORK}/examples" && diff -r "${WORK}/examples" "${_ROOT}/events/examples" && ls "${WORK}/examples" | wc -l | tr -d " "'
-EXPECTED_STDOUT="133 example scripts written to ${WORK}/examples
-133"
+EXPECTED_STDOUT="148 example scripts written to ${WORK}/examples
+148"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "events/examples/ is up to date with 'gits events --examples'"

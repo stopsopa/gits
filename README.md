@@ -271,7 +271,7 @@ gits events --examples <directory>       # an example script of every event, its
 One more variable is not an event of a command: the script of `GITS_EXIT` runs as the last
 thing of every start of gits, however it ended (error, Ctrl+C, `kill`), like `trap ... EXIT` of
 a shell. A complete example with both, an encryption server started at `START` and stopped by
-`GITS_EXIT`: [examples/ENCRYPT_PROCESS.md](examples/ENCRYPT_PROCESS.md).
+`GITS_EXIT`: [examples/encrypt/ENCRYPT_PROCESS.md](examples/encrypt/ENCRYPT_PROCESS.md).
 
 **Everything about them, with a graph of every command: [LIFECYCLE.md](LIFECYCLE.md).**
 Example scripts: [events/examples/](events/examples/).
@@ -299,6 +299,43 @@ to the process listening there, which is the encoder of
   The config is pulled first: when the stored one differs from the local one the list is read again before any
   other file is copied, so a file another machine marked `:e:` is never copied over the local one encrypted.
 - An element changed from `::` to `:e:` (or back) is converted by the next `gits push --yes`.
+
+### Without the socket, and the form of what is stored
+
+gits knows nothing about keys. It knows the socket, and it can tell whether a stored file is
+an encrypted one: a text file (never a binary one) which starts with the lines `#ssenc1 ...` + `#slot ...`.
+
+| | stored plain (or not stored yet) | stored encrypted |
+|---|---|---|
+| **no `GITS_ENCRYPTION_SOCKET`** | `:e:` is ignored: the file is transported as it is, like `::` | error: the socket is needed, nothing is touched |
+| **`GITS_ENCRYPTION_SOCKET`** | used as it is (said in the output); the next `push --yes` encrypts it | decrypted / encrypted through the socket |
+
+So without an encoder process everything works, plain. Once files are encrypted, going back is
+explicit. `gits crypt` changes the form of what is already in the storage (only the storage:
+one commit, one push; local files are not touched):
+
+```sh
+gits crypt status              # every :e: file: encrypted [fingerprints of the keys which open it], plain, missing
+gits crypt encrypt --yes       # :e: files stored plain -> encrypted
+gits crypt decrypt --yes       # files stored encrypted -> plain, the rest is left as it is
+gits crypt rekey --yes         # files stored encrypted -> the new keys of the encoder process
+gits crypt rekey --rewrap-only --yes     # only the key lines at the top of each file change
+```
+
+- scope, after the verb: nothing = the `:e:` elements of this project; `all` = of every project
+  below the current directory; `--storage` = every file of the storage which is encrypted,
+  whatever config it belongs to, also projects which are not on this machine (not for `encrypt`:
+  only a config says what should be encrypted)
+- without `--yes`: only the list of files which would change, exit code 1
+- `status` needs no socket, the fingerprints are written in the files
+- `rekey` sends the requests `rekey "<file>" "<file>"` / `rewrap "<file>" "<file>"`: the encoder
+  process has to be started with the key which opens the files and with the new keys. The server
+  of `submodules/encrypt` doesn't answer them (yet); the one of the demo does
+- a rekey doesn't clean the history of the storage: old commits stay readable with the old key
+
+All of it step by step, with a server which starts and stops by itself, two keys and two
+projects to play with: [examples/encrypt/ENCRYPT_PROCESS.md](examples/encrypt/ENCRYPT_PROCESS.md)
+(steps 6 and 7). The design: [examples/encrypt/ENCRYPT_IN_GITS_PLAN.md](examples/encrypt/ENCRYPT_IN_GITS_PLAN.md).
 
 ### Keeping the encoder process running
 
@@ -391,6 +428,7 @@ In the root of a project:
 | `gits pull --yes` | storage -> local files, **they are overwritten**. Without `--yes` nothing is changed |
 | `gits url` | web address of the directory of the project in the storage |
 | `gits add [-e] <file\|directory> ...` | appends elements to `GITS_LIST`, nothing else, so it can be reviewed. In a terminal: [a list to tick](#5-adding-files-to-the-list) which files and which of them encrypted, written after `ctrl+enter`. Without the list: `echo "" \| gits add ...`. `-e`: as encrypted elements (`SOURCE:e:TARGET`); with the list it only pre-ticks **enc** |
+| `gits crypt status\|encrypt\|decrypt\|rekey [all\|--storage] [--rewrap-only] [--yes]` | the form of the `:e:` files in the storage: [which are encrypted and with which keys, encrypt, decrypt, change the keys](#without-the-socket-and-the-form-of-what-is-stored) |
 | `gits move <old remote> <new remote>` | prints the procedure of renaming the directory in the storage after the remote `origin` changed |
 | `gits migrate` | `.git/gitstorage-config.sh` -> `.git/gits.sh`, old names of the variables -> new ones |
 
@@ -415,7 +453,7 @@ and one variable per lifecycle event) in three columns:
 | --- | --- | --- |
 | `GITS_SOURCE` | required | the storage, e.g. `git@github.com:stopsopa/gitstorage.git`. Checked before anything else; only `--help`, `--version`, `events` and `--update` work without it |
 | `GITS_SHELL` | `/bin/bash` | shell which executes `.git/gits.sh` and the lifecycle scripts |
-| `GITS_ENCRYPTION_SOCKET` | | unix socket of the encoder process, needed only for `:e:` elements |
+| `GITS_ENCRYPTION_SOCKET` | | unix socket of the encoder process. Not defined: `:e:` is ignored, files are transported as they are (an error only when a file is already stored encrypted) |
 | `GITS_TEMPLATE` | built-in | url or file: template for `gits init`. Its line `GITS_TARGETDIR=...` is replaced |
 | `GITS_PULL_TO_SYNC` | | directory (absolute or `~/...`) where the clone of the storage is kept between the runs, for every command. Not defined: a fresh clone in a directory with a random name in the current directory, removed at the end. Defined: the first command clones there, the next ones run `git fetch` and put the clone back to what origin has, on the branch the clone started with (the default branch of the storage); whatever was left there (local commits, untracked files) is thrown away, also at the end of every command. A directory which is not empty and not a clone of `GITS_SOURCE` is refused and not touched. Don't run two gits commands at the same time with it: they would share the directory. Not an event of `pull`, despite the name |
 | `GITS_EXIT` | | path of a script which runs as the last thing of **every** start of gits, however it ends: success, error, Ctrl+C, `kill`, closed terminal (not `kill -9`). Like `trap ... EXIT` of a shell. `$1` `EXIT`, `$2` the command, `$3` the exit code. See [LIFECYCLE.md](LIFECYCLE.md#gits_exit-always-at-the-end) |
@@ -480,6 +518,7 @@ it is not there yet. The submodule has to be there: `git submodule update --init
 | `events/examples/` | an example script per event, generated: `gits events --examples events/examples` (a test checks that it is up to date) |
 | `src/cli.rs` | the only place where other programs are started (git, the shell reading the config, curl...): env, working directory, output forwarded while it flows and collected. Rust version of `workshop/cli/cli.ts` |
 | `src/socket.rs` | client of the encoder process |
+| `src/crypt.rs` | `gits crypt`, and the check whether a file is an encrypted one |
 | `src/update.rs` | `--update` |
 | `gits.sh` | wrapper: makes sure the encoder process runs, then calls the binary |
 | `tests/encoder/encoder-start.sh`, `tests/encoder/encoder-stop.sh` | the encoder process of `submodules/encrypt` on `GITS_ENCRYPTION_SOCKET` |

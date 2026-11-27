@@ -8,6 +8,9 @@
 # examples/SUMMARY.md: everything its commands create
 /s/
 
-# examples/ENCRYPT_PROCESS.md: everything its scripts create
-/examples/tmp/
-/examples/server.log
+# examples/encrypt/ENCRYPT_PROCESS.md: everything its scripts create
+/examples/encrypt/tmp/
+/examples/encrypt/server.log
+/examples/encrypt/gits_source/
+/examples/encrypt/repoa/
+/examples/encrypt/repob/

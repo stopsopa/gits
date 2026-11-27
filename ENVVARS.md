@@ -13,6 +13,8 @@ GITS_SHELL="/bin/bash"
     (was: GITSTORAGETESHELL)
 
 GITS_ENCRYPTION_SOCKET=""
+    unix socket of the encoder process. Not defined: ':e:' is ignored, files are transported
+    as they are (an error only when a file is already stored encrypted). See: gits crypt
     (was: GITSTORAGETENCRYPTIONSOCKET)
 
 GITS_<COMMAND>_<EVENT>="~/.gits/events/script.sh"

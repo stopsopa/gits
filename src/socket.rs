@@ -13,6 +13,12 @@ use std::time::Duration;
  *   decode "<encrypted file>" "<plain file>"     ->   ok decode "<plain file>" 2ms
  *                                                     error MALFORMED not an ssenc1 file ...
  *
+ * Only for "gits crypt rekey", and only a server which was started with new keys answers them
+ * (the keys are the business of the server, gits never knows them):
+ *
+ *   rekey  "<encrypted file>" "<encrypted file>"   ->   ok rekey "<encrypted file>"     everything encrypted again
+ *   rewrap "<encrypted file>" "<encrypted file>"   ->   ok rewrap "<encrypted file>"    only the key lines replaced
+ *
  * A path is written like a JSON string. Paths are always sent absolute: a relative one would be
  * resolved against the directory the server was started in.
  */
@@ -37,11 +43,23 @@ impl EncError {
     pub fn malformed(&self) -> bool {
         self.kind == "MALFORMED"
     }
+
+    // the key of the server doesn't open the file (or the file was modified)
+    pub fn auth(&self) -> bool {
+        self.kind == "AUTH"
+    }
 }
 
 impl std::fmt::Display for EncError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.kind, self.message)
+        write!(f, "{} {}", self.kind, self.message)?;
+        if self.auth() {
+            write!(
+                f,
+                " (the key of the encoder process doesn't open this file: is it stored with another key? see: gits crypt status)"
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -96,6 +114,12 @@ impl Encoder {
 
     pub fn decode(&mut self, encrypted: &Path, plain: &Path) -> Result<(), EncError> {
         self.request("decode", encrypted, plain)
+    }
+
+    // the keys of an encrypted file replaced by the new keys of the server.
+    // rewrap: only the key lines at the top change, the rest stays byte for byte
+    pub fn rekey(&mut self, encrypted: &Path, output: &Path, rewrap: bool) -> Result<(), EncError> {
+        self.request(if rewrap { "rewrap" } else { "rekey" }, encrypted, output)
     }
 
     fn request(&mut self, command: &str, input: &Path, output: &Path) -> Result<(), EncError> {

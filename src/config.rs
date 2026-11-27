@@ -29,7 +29,7 @@ pub struct Entry {
     pub encrypted: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Project {
     // GITS_TARGETDIR
     pub target_dir: String,

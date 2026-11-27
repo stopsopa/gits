@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::cli::{cli, Options};
 use crate::config::{self, Project};
+use crate::crypt;
 use crate::events;
 use crate::socket::Lazy;
 use crate::util::{self, 
@@ -28,7 +29,7 @@ const LOCAL_COMMIT: [&str; 6] = [
     "commit.gpgsign=false",
 ];
 
-fn sgit(cwd: &Path, args: &[&str], quiet: bool) -> Result<(), String> {
+pub(crate) fn sgit(cwd: &Path, args: &[&str], quiet: bool) -> Result<(), String> {
     let mut all: Vec<&str> = NO_GLOBAL_IGNORE.to_vec();
     all.extend_from_slice(args);
     git(cwd, &all, quiet)
@@ -281,7 +282,7 @@ impl Storage {
         sgit(&self.root, &["clean", "-q", "-f", "-d", "-x"], true)
     }
 
-    fn status(&self) -> Result<String, String> {
+    pub(crate) fn status(&self) -> Result<String, String> {
         sgit_out(&self.root, &["status", "-s"])
     }
 }
@@ -556,7 +557,7 @@ fn final_url(ctx: &Ctx, storage: &Storage, project: &Project) {
     );
 }
 
-fn load(ctx: &Ctx, quiet: bool) -> Result<Project, String> {
+pub(crate) fn load(ctx: &Ctx, quiet: bool) -> Result<Project, String> {
     let loaded = config::load(&ctx.cwd, quiet)?;
     if !quiet {
         print!("{}", loaded.output);
@@ -570,6 +571,49 @@ fn loaded_event(dir: &Path, loaded: &config::Loaded) -> Result<(), String> {
     project_context(dir, &loaded.project);
     events::set_config_scripts(loaded.scripts.clone());
     events::fire("CONFIG_LOADED", &[], &[])
+}
+
+/**
+ * Without GITS_ENCRYPTION_SOCKET ":e:" is ignored: the files are transported as they are, like "::".
+ * With one exception: a file which is already stored encrypted. Copied as it is it would overwrite
+ * the local file with encrypted text (pull) or replace the encrypted file by a plain one (push),
+ * so that is an error: once something is encrypted, going back is an explicit "gits crypt decrypt".
+ *
+ * Returns the project as the rest of the command should see it.
+ */
+pub(crate) fn without_socket(
+    ctx: &Ctx,
+    storage: &Storage,
+    mut project: Project,
+    quiet: bool,
+) -> Result<Project, String> {
+    if ctx.socket.is_some() || !project.list.iter().any(|e| e.encrypted) {
+        return Ok(project);
+    }
+    for entry in project.list.iter().filter(|e| e.encrypted) {
+        if crypt::slots(&storage.root.join(&entry.target)).is_some() {
+            return Err(format!(
+                "'{}' is stored encrypted but env var {} is not defined, \
+                 it has to point to the unix socket of the encoder process \
+                 (to store everything not encrypted again: gits crypt decrypt)",
+                entry.target,
+                crate::socket::ENV_SOCKET
+            ));
+        }
+    }
+    if !quiet {
+        println!(
+            "{}",
+            yellow(&format!(
+                "env var {} is not defined: ':e:' is ignored, files are transported as they are",
+                crate::socket::ENV_SOCKET
+            ))
+        );
+    }
+    for entry in project.list.iter_mut() {
+        entry.encrypted = false;
+    }
+    Ok(project)
 }
 
 // directory where "git diff" / "git status" are run: the one of the project when the storage has it
@@ -596,6 +640,7 @@ pub fn diff(ctx: &Ctx) -> Result<i32, String> {
     let project = load(ctx, false)?;
     let temp = Temp::create(&ctx.cwd, false)?;
     let storage = Storage::clone(&ctx.source, &temp.path, false)?;
+    let project = without_socket(ctx, &storage, project, false)?;
     let mut enc = Lazy::new(ctx.socket.clone());
 
     let code = match check(&storage, &project, &mut enc, false)? {
@@ -684,6 +729,7 @@ pub fn isinsync(ctx: &Ctx) -> Result<i32, String> {
     let project = load(ctx, true)?;
     let temp = Temp::create(&ctx.cwd, true)?;
     let storage = Storage::clone(&ctx.source, &temp.path, true)?;
+    let project = without_socket(ctx, &storage, project, true)?;
     let mut enc = Lazy::new(ctx.socket.clone());
     Ok(match check(&storage, &project, &mut enc, true)? {
         Outcome::InSync => 0,
@@ -696,6 +742,7 @@ fn dry(ctx: &Ctx, action: &str) -> Result<i32, String> {
     let project = load(ctx, false)?;
     let temp = Temp::create(&ctx.cwd, false)?;
     let storage = Storage::clone(&ctx.source, &temp.path, false)?;
+    let project = without_socket(ctx, &storage, project, false)?;
     let mut enc = Lazy::new(ctx.socket.clone());
 
     let code = match check(&storage, &project, &mut enc, false)? {
@@ -749,6 +796,7 @@ pub fn push(ctx: &Ctx, yes: bool) -> Result<i32, String> {
 
     let temp = Temp::create(&ctx.cwd, false)?;
     let storage = Storage::clone(&ctx.source, &temp.path, false)?;
+    let project = without_socket(ctx, &storage, project, false)?;
     storage_context(&storage, &project);
     let mut enc = Lazy::new(ctx.socket.clone());
     let mut missing = false;
@@ -940,9 +988,10 @@ pub fn pull(ctx: &Ctx, yes: bool) -> Result<i32, String> {
         return dry(ctx, "pull");
     }
 
-    let mut project = load(ctx, false)?;
+    let project = load(ctx, false)?;
     let temp = Temp::create(&ctx.cwd, false)?;
     let storage = Storage::clone(&ctx.source, &temp.path, false)?;
+    let mut project = without_socket(ctx, &storage, project, false)?;
     storage_context(&storage, &project);
     let mut enc = Lazy::new(ctx.socket.clone());
     let mut failed = false;
@@ -971,7 +1020,7 @@ pub fn pull(ctx: &Ctx, yes: bool) -> Result<i32, String> {
                     config::CONFIG
                 ))
             );
-            project = load(ctx, false)?;
+            project = without_socket(ctx, &storage, load(ctx, false)?, true)?;
         }
     }
 
@@ -1111,7 +1160,9 @@ pub fn state(ctx: &Ctx) -> Result<i32, String> {
         }
         let storage = storage.as_ref().unwrap();
 
-        let result = match check(storage, &loaded.project, &mut enc, false) {
+        let result = match without_socket(ctx, storage, loaded.project, false)
+            .and_then(|project| check(storage, &project, &mut enc, false))
+        {
             Ok(Outcome::InSync) => {
                 println!("{}", green("    files are in sync"));
                 success += 1;
