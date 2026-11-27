@@ -376,7 +376,10 @@ cd ../repob
 cd ..
 
 /bin/bash gits.sh crypt status all        # encrypted: 4, each with [SHA256:...]: the fingerprint of the key
-ssh-keygen -lf tmp/key.pub                # the same fingerprint
+
+ssh-keygen -lf tmp/key.pub                # the same fingerprint 
+    # (It prints the fingerprint of the public key in tmp/key.pub. It changes nothing: no key is created or modified.)
+
 head -n 1 "gits_source/git@github.com:demo__repob.git/secrets/token.txt"   # #ssenc1 lines ...  text: line by line
 head -n 1 "gits_source/git@github.com:demo__repob.git/secrets/cert.bin"    # #ssenc1 blob ...   binary: as a whole
 ```
