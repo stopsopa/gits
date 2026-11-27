@@ -339,8 +339,10 @@ cd ..
 it belongs to:
 
 ```sh
-/bin/bash gits.sh crypt decrypt --storage         # the list
+/bin/bash gits.sh crypt decrypt --storage         # the list - but that is pretty useless, 
 /bin/bash gits.sh crypt decrypt --storage --yes   # one commit, one push
+# we will never want to decrypt all in GITS_SOURCE
+
 cat "gits_source/git@github.com:demo__repoa.git/.env"                         # plain text again
 cmp repob/secrets/cert.bin "gits_source/git@github.com:demo__repob.git/secrets/cert.bin" && echo identical
 git -C gits_source log --oneline                  # gits crypt decrypt (storage, 4 files)
@@ -353,6 +355,16 @@ below the current directory (only a config says what should be encrypted, so the
 
 ```sh
 GITS_DEMO_SSH_KEY=key2 /bin/bash gits.sh crypt encrypt all --yes
+# we will never want to decrypt all in GITS_SOURCE
+# WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
+# WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
+# WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
+# WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
+# WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
+# WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
+# WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
+# WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
+
 /bin/bash gits.sh crypt status --storage          # encrypted: 4, the fingerprint of key2
 ssh-keygen -lf tmp/key2.pub
 

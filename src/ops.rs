@@ -622,15 +622,15 @@ pub(crate) fn without_socket(
     if !quiet {
         println!(
             "{}",
-            yellow(&format!(
+            red(&format!(
                 "{reason}: ':e:' is ignored, files are transported as they are"
             ))
         );
     }
     if confirm {
-        println!("{}", yellow("WITHOUT ENCRYPTION, although marked ':e:':"));
+        println!("{}", red("WITHOUT ENCRYPTION, although marked ':e:':"));
         for entry in project.list.iter().filter(|e| e.encrypted) {
-            println!("{}", yellow(&format!("    '{}'", entry.raw_source)));
+            println!("{}", red(&format!("    '{}'", entry.raw_source)));
         }
         if crate::menu::stdin_is_terminal()
             && !crate::menu::confirm("Enter: go on without encryption    Esc: stop")?
