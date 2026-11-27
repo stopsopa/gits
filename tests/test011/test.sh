@@ -301,25 +301,30 @@ EEE
 export GITS_ENCRYPTION_SOCKET="${SOCK}"
 
 # still without GITS_ENCODER_SSH_KEY: the wrapper starts nothing, so the binary finds nobody
-# on the socket when it wants to encrypt .env. The error is the one of the binary, exit code 1.
-COMMAND='run /bin/bash "${WRAPPER}" push --yes 2>&1 | has "can'"'"'t connect to the encoder process"'
-EXPECTED_STDOUT="can't connect to the encoder process"
+# on the socket. A socket which doesn't work is like no socket: the binary says why, lists the
+# ':e:' files and pushes them as they are (no terminal here: nobody is asked). Exit code 0.
+COMMAND='run /bin/bash "${WRAPPER}" push --yes 2>&1 | has "can'"'"'t connect to the encoder process" "WITHOUT ENCRYPTION, although marked '"'"':e:'"'"':" "files pushed"; stored "${D}/.env"'
+EXPECTED_STDOUT="can't connect to the encoder process
+WITHOUT ENCRYPTION, although marked ':e:':
+files pushed
+A=1
+B=2"
 EXPECTED_STDERR=""
-EXPECTED_CODE="1"
-test "wrapper without GITS_ENCODER_SSH_KEY and nobody listens: error of the binary"
+EXPECTED_CODE="0"
+test "wrapper without GITS_ENCODER_SSH_KEY and nobody listens: a warning, pushed not encrypted"
 
 # with the key the wrapper has everything to start the encoder process by itself
 export GITS_ENCODER_SSH_KEY="${KEY}"
 
 # the first call through the wrapper with the key: it starts the encoder process and then
 # isinsync. Nothing may be printed: isinsync is silent, and the wrapper says nothing about a
-# process it started without problems (stdout and stderr are both compared with ""). Exit code 1
-# is the answer of isinsync: not in sync, the storage is still empty.
+# process it started without problems (stdout and stderr are both compared with ""). Exit code 0
+# is the answer of isinsync: in sync, .env is stored (not encrypted yet) with the same content.
 COMMAND='run /bin/bash "${WRAPPER}" isinsync'
 EXPECTED_STDOUT=""
 EXPECTED_STDERR=""
-EXPECTED_CODE="1"
-test "wrapper with GITS_ENCODER_SSH_KEY: the encoder process is started without a word, isinsync works (not in sync)"
+EXPECTED_CODE="0"
+test "wrapper with GITS_ENCODER_SSH_KEY: the encoder process is started without a word, isinsync works (in sync)"
 
 # the pid of the process the wrapper started
 PID="$(cat "${SOCK}.pid")"

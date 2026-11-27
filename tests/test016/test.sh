@@ -137,8 +137,11 @@ test "crypt status all: four :e: files, not stored yet"
 
 cd "${DEMO}/repoa"
 
-COMMAND='plain push --yes 2>&1 | has "GITS_ENCRYPTION_SOCKET is not defined: '"'"':e:'"'"' is ignored" "(encrypted)" "files pushed"; form "${A}/.env"; cmp .env "${SRC}/${A}/.env" && echo identical'
+# stdin of a test is not a terminal: the warning with the list of the files, nobody is asked
+COMMAND='plain push --yes 2>&1 | has "GITS_ENCRYPTION_SOCKET is not defined: '"'"':e:'"'"' is ignored" "WITHOUT ENCRYPTION, although marked '"'"':e:'"'"':" "    '"'"'../.env'"'"'" "Enter: go on" "(encrypted)" "files pushed"; form "${A}/.env"; cmp .env "${SRC}/${A}/.env" && echo identical'
 EXPECTED_STDOUT="GITS_ENCRYPTION_SOCKET is not defined: ':e:' is ignored
+WITHOUT ENCRYPTION, although marked ':e:':
+    '../.env'
 files pushed
 plain
 identical"
@@ -151,6 +154,32 @@ EXPECTED_STDOUT="code 0"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "no socket: isinsync 0"
+
+# the binary itself, with a socket nobody listens on (the wrapper would start a server there)
+function dead {
+  GITS_SOURCE="${SRC}" GITS_ENCRYPTION_SOCKET="${WORK}/nobody.sock" "${BIN}" "${@}"
+}
+
+# a socket which doesn't work is like no socket: the reason is said, the command goes on
+COMMAND='dead pull --yes 2>&1 | has "can'"'"'t connect to the encoder process on socket GITS_ENCRYPTION_SOCKET=>${WORK}/nobody.sock<" "'"'"':e:'"'"' is ignored" "WITHOUT ENCRYPTION, although marked '"'"':e:'"'"':"; dead isinsync; echo "code ${?}"'
+EXPECTED_STDOUT="can't connect to the encoder process on socket GITS_ENCRYPTION_SOCKET=>${WORK}/nobody.sock<
+':e:' is ignored
+WITHOUT ENCRYPTION, although marked ':e:':
+code 0"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "socket nobody listens on: like no socket, with the reason"
+
+# a config without any ':e:': nothing about encryption is said, with no socket and with a dead one.
+# (the config itself is a stored file: pull brings the stored one back, nothing is pushed here)
+cp .git/gits.sh "${WORK}/gits.sh.backup"
+sed -i.bak 's/:e:/::/' .git/gits.sh && rm .git/gits.sh.bak
+COMMAND='(plain diff; dead diff; dead pull --yes) 2>&1 | grep -c "is ignored\|WITHOUT ENCRYPTION\|encoder process"'
+EXPECTED_STDOUT="0"
+EXPECTED_STDERR=""
+EXPECTED_CODE="1"
+test "no ':e:' in the config: no warning at all"
+cp "${WORK}/gits.sh.backup" .git/gits.sh
 
 # ---------- 3. with the socket ----------
 

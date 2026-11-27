@@ -308,8 +308,14 @@ an encrypted one: a text file (never a binary one) which starts with the lines `
 
 | | stored plain (or not stored yet) | stored encrypted |
 |---|---|---|
-| **no `GITS_ENCRYPTION_SOCKET`** | `:e:` is ignored: the file is transported as it is, like `::` | error: the socket is needed, nothing is touched |
+| **no `GITS_ENCRYPTION_SOCKET`**, or nobody answers on it | `:e:` is ignored: the file is transported as it is, like `::` | error: the socket is needed, nothing is touched |
 | **`GITS_ENCRYPTION_SOCKET`** | used as it is (said in the output); the next `push --yes` encrypts it | decrypted / encrypted through the socket |
+
+`push` and `pull` say it before they do anything: the reason (the variable is not defined, or
+the connection error), then the list of the `:e:` files which will go without encryption. In a
+terminal they wait for a key: Enter goes on, Esc stops and nothing is changed. When stdin is not
+a terminal (a script, CI) there is only the warning. A config without any `:e:` element is not
+concerned: nothing is said, nothing is asked, the socket is not even tried.
 
 So without an encoder process everything works, plain. Once files are encrypted, going back is
 explicit. `gits crypt` changes the form of what is already in the storage (only the storage:

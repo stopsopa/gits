@@ -339,6 +339,12 @@ The design and the decisions: `examples/encrypt/ENCRYPT_IN_GITS_PLAN.md`.
 - **no `GITS_ENCRYPTION_SOCKET`: `:e:` is ignored**, files are transported as they are (it used
   to be an error for every command). Still an error: a file which is already stored encrypted
   (`src/ops.rs`, `without_socket`)
+- **a socket nobody answers on is like no socket** (it used to be an error): the connection
+  error is the reason shown in the warning
+- **`push` and `pull` list the `:e:` files which go without encryption and wait** for Enter
+  (go on) or Esc (stop, nothing changed), only when stdin is a terminal; otherwise only the
+  warning. Also with `--yes`. Nothing is said or asked for a config without `:e:` elements
+  (`src/menu.rs`, `confirm`; tests: `tests/test016`, `tests/test011`)
 - **a file is an encrypted one** when it is not binary (no NUL byte at its beginning) and starts
   with `#ssenc1 lines|blob ...` followed by `#slot ...` lines (`src/crypt.rs`, `slots`). No key
   and no socket needed; the slot lines also give the fingerprints of the keys

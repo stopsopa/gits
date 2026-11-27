@@ -62,7 +62,7 @@ encrypted, lists it, and changes nothing without `--yes`).
 
 | | stored plain (or not stored yet) | stored encrypted |
 |---|---|---|
-| **no socket** | transported as it is, with a notice that `:e:` is ignored | **error: the socket is needed**, nothing is touched |
+| **no socket** (or nobody answers on it) | transported as it is, with a notice that `:e:` is ignored; `push` / `pull` list the files and in a terminal wait for Enter / Esc | **error: the socket is needed**, nothing is touched |
 | **socket** | pull / diff use it as it is and say so; push encrypts it | decrypted / encrypted through the socket |
 
 - the top right cell: transporting ciphertext as it is would overwrite the local `.env` with

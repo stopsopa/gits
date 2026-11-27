@@ -403,6 +403,87 @@ pub fn interactive() -> bool {
     unsafe { libc::isatty(0) == 1 && libc::isatty(1) == 1 }
 }
 
+// a person can be asked: stdin is a terminal (not a pipe, a file or /dev/null)
+pub fn stdin_is_terminal() -> bool {
+    unsafe { libc::isatty(0) == 1 }
+}
+
+// what a key means for confirm(). None: not an answer, wait for the next one
+fn answer(key: &Key) -> Option<bool> {
+    match key {
+        Key::Enter | Key::Char('y') | Key::Char('Y') => Some(true),
+        Key::Esc | Key::Interrupt | Key::Char('q') | Key::Char('n') | Key::Char('N') => Some(false),
+        _ => None,
+    }
+}
+
+/**
+ * Prints the prompt and waits for one key: Enter (or y) is true, Esc (or n, q, ctrl+c) is false.
+ * Only for a terminal on stdin (stdin_is_terminal()). The terminal is given back as it was.
+ */
+pub fn confirm(prompt: &str) -> Result<bool, String> {
+    let mut saved: libc::termios = unsafe { std::mem::zeroed() };
+    if unsafe { libc::tcgetattr(0, &mut saved) } != 0 {
+        return Err("can't read the settings of the terminal".to_string());
+    }
+    let mut raw = saved;
+    // a key arrives at once and is not printed; ctrl+c stays a signal. read() returns after
+    // 0.1 s also without a key: time to notice a signal, and that Esc was not the start of a sequence
+    raw.c_lflag &= !(libc::ICANON | libc::ECHO);
+    raw.c_cc[libc::VMIN] = 0;
+    raw.c_cc[libc::VTIME] = 1;
+    if unsafe { libc::tcsetattr(0, libc::TCSAFLUSH, &raw) } != 0 {
+        return Err("can't switch the terminal to read one key".to_string());
+    }
+    out(&format!("{prompt} "));
+
+    let mut pending: Vec<u8> = Vec::new();
+    let result = loop {
+        if interrupted() {
+            break Ok(false);
+        }
+        let mut buffer = [0u8; 64];
+        let count =
+            unsafe { libc::read(0, buffer.as_mut_ptr() as *mut libc::c_void, buffer.len()) };
+        let mut decided = None;
+        if count > 0 {
+            pending.extend_from_slice(&buffer[..count as usize]);
+        } else if count < 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() != std::io::ErrorKind::Interrupted {
+                break Err(format!("can't read from the terminal: {error}"));
+            }
+        } else if !pending.is_empty() {
+            // nothing came after the beginning of a sequence: Esc alone is the key Esc
+            if pending == [0x1b] {
+                decided = Some(false);
+            }
+            pending.clear();
+        }
+        // without raw mode Enter arrives as a line feed
+        if pending.first() == Some(&b'\n') {
+            decided = Some(true);
+        }
+        while decided.is_none() {
+            let Some((key, used)) = parse_key(&pending) else {
+                break;
+            };
+            pending.drain(..used);
+            decided = answer(&key);
+        }
+        if let Some(yes) = decided {
+            break Ok(yes);
+        }
+    };
+
+    unsafe { libc::tcsetattr(0, libc::TCSAFLUSH, &saved) };
+    out(match result {
+        Ok(true) => "go on\n",
+        _ => "stop\n",
+    });
+    result
+}
+
 fn size() -> (usize, usize) {
     let mut ws: libc::winsize = unsafe { std::mem::zeroed() };
     let ok = unsafe { libc::ioctl(1, libc::TIOCGWINSZ, &mut ws) } == 0;
@@ -555,6 +636,17 @@ mod tests {
             }
         }
         None
+    }
+
+    #[test]
+    fn confirm_keys() {
+        assert_eq!(answer(&Key::Enter), Some(true));
+        assert_eq!(answer(&Key::Char('y')), Some(true));
+        assert_eq!(answer(&Key::Esc), Some(false));
+        assert_eq!(answer(&Key::Interrupt), Some(false));
+        assert_eq!(answer(&Key::Char('n')), Some(false));
+        assert_eq!(answer(&Key::Char('x')), None);
+        assert_eq!(answer(&Key::Space), None);
     }
 
     #[test]

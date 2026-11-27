@@ -281,7 +281,7 @@ an encrypted one (a text file starting with the lines `#ssenc1 ...` + `#slot ...
 
 | | stored plain (or not stored yet) | stored encrypted |
 |---|---|---|
-| **no `GITS_ENCRYPTION_SOCKET`** | `:e:` is ignored: transported as it is | error: the socket is needed |
+| **no `GITS_ENCRYPTION_SOCKET`**, or nobody answers on it | `:e:` is ignored: transported as it is | error: the socket is needed |
 | **`GITS_ENCRYPTION_SOCKET`** | used as it is; the next push encrypts it | decrypted / encrypted through the socket |
 
 and `gits crypt` changes the form of what is already stored. Start from scratch (the storage
@@ -294,11 +294,13 @@ cd examples/encrypt                       # skip when you are already there
 
 **No socket: `:e:` is ignored.** `GITS_ENCRYPTION_SOCKET=` in front of the wrapper defines the
 variable as an empty text for that one command: gits runs without the socket, and the wrapper
-starts neither `start.sh` nor `stop.sh`:
+starts neither `start.sh` nor `stop.sh`. `push` and `pull` list the `:e:` files first and wait
+for you: Enter goes on without encryption, Esc stops (in a script, without a terminal, there is
+only the warning):
 
 ```sh
 cd repoa
-GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh push --yes   # ':e:' is ignored, files are transported as they are
+GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh push --yes   # WITHOUT ENCRYPTION ... '../.env', press Enter: files are transported as they are
 cat "../gits_source/git@github.com:demo__repoa.git/.env"  # plain text
 GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh diff         # files are in sync
 cd ..

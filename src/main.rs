@@ -370,9 +370,13 @@ Encryption (elements SOURCE:e:TARGET):
   gits never encrypts by itself: it sends requests to the encoder process listening on the
   unix socket GITS_ENCRYPTION_SOCKET. Which key encrypts is the business of that process.
 
-  GITS_ENCRYPTION_SOCKET not defined:
+  GITS_ENCRYPTION_SOCKET not defined, or nobody answers on that socket:
                         ':e:' is ignored, files are transported as they are (like '::').
                         Only a file which is already stored encrypted is an error.
+                        push and pull list the ':e:' files first, and in a terminal they wait:
+                        Enter goes on without encryption, Esc stops. Without a terminal
+                        (stdin is not one) there is only the warning.
+                        A config without ':e:' elements: nothing of this is said or asked.
   GITS_ENCRYPTION_SOCKET defined:
                         push encrypts, pull and diff decrypt. A ':e:' file which is still
                         stored plain is used as it is, and encrypted by the next push.

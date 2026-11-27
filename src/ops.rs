@@ -574,10 +574,15 @@ fn loaded_event(dir: &Path, loaded: &config::Loaded) -> Result<(), String> {
 }
 
 /**
- * Without GITS_ENCRYPTION_SOCKET ":e:" is ignored: the files are transported as they are, like "::".
+ * Without a working encoder process ":e:" is ignored: the files are transported as they are, like
+ * "::". "Without": GITS_ENCRYPTION_SOCKET is not defined, or nobody answers on that socket.
  * With one exception: a file which is already stored encrypted. Copied as it is it would overwrite
  * the local file with encrypted text (pull) or replace the encrypted file by a plain one (push),
  * so that is an error: once something is encrypted, going back is an explicit "gits crypt decrypt".
+ *
+ * confirm (push, pull): the warning lists the files, and when a person sits at the terminal
+ * (stdin is one) gits waits: Enter goes on without encryption, Esc stops before anything is done.
+ * Without a terminal there is only the warning.
  *
  * Returns the project as the rest of the command should see it.
  */
@@ -586,18 +591,31 @@ pub(crate) fn without_socket(
     storage: &Storage,
     mut project: Project,
     quiet: bool,
+    confirm: bool,
 ) -> Result<Project, String> {
-    if ctx.socket.is_some() || !project.list.iter().any(|e| e.encrypted) {
+    if !project.list.iter().any(|e| e.encrypted) {
         return Ok(project);
     }
+    let name = crate::socket::ENV_SOCKET;
+    // why there is no encryption. None: there is, nothing to do here
+    let (reason, stored_but) = match &ctx.socket {
+        None => (
+            format!("env var {name} is not defined"),
+            format!(
+                "env var {name} is not defined, it has to point to the unix socket of the encoder process"
+            ),
+        ),
+        Some(path) => match crate::socket::Encoder::connect(path) {
+            Ok(_) => return Ok(project),
+            Err(e) => (e.clone(), e),
+        },
+    };
     for entry in project.list.iter().filter(|e| e.encrypted) {
         if crypt::slots(&storage.root.join(&entry.target)).is_some() {
             return Err(format!(
-                "'{}' is stored encrypted but env var {} is not defined, \
-                 it has to point to the unix socket of the encoder process \
+                "'{}' is stored encrypted but {stored_but} \
                  (to store everything not encrypted again: gits crypt decrypt)",
-                entry.target,
-                crate::socket::ENV_SOCKET
+                entry.target
             ));
         }
     }
@@ -605,10 +623,20 @@ pub(crate) fn without_socket(
         println!(
             "{}",
             yellow(&format!(
-                "env var {} is not defined: ':e:' is ignored, files are transported as they are",
-                crate::socket::ENV_SOCKET
+                "{reason}: ':e:' is ignored, files are transported as they are"
             ))
         );
+    }
+    if confirm {
+        println!("{}", yellow("WITHOUT ENCRYPTION, although marked ':e:':"));
+        for entry in project.list.iter().filter(|e| e.encrypted) {
+            println!("{}", yellow(&format!("    '{}'", entry.raw_source)));
+        }
+        if crate::menu::stdin_is_terminal()
+            && !crate::menu::confirm("Enter: go on without encryption    Esc: stop")?
+        {
+            return Err("stopped, nothing was changed".to_string());
+        }
     }
     for entry in project.list.iter_mut() {
         entry.encrypted = false;
@@ -640,7 +668,7 @@ pub fn diff(ctx: &Ctx) -> Result<i32, String> {
     let project = load(ctx, false)?;
     let temp = Temp::create(&ctx.cwd, false)?;
     let storage = Storage::clone(&ctx.source, &temp.path, false)?;
-    let project = without_socket(ctx, &storage, project, false)?;
+    let project = without_socket(ctx, &storage, project, false, false)?;
     let mut enc = Lazy::new(ctx.socket.clone());
 
     let code = match check(&storage, &project, &mut enc, false)? {
@@ -729,7 +757,7 @@ pub fn isinsync(ctx: &Ctx) -> Result<i32, String> {
     let project = load(ctx, true)?;
     let temp = Temp::create(&ctx.cwd, true)?;
     let storage = Storage::clone(&ctx.source, &temp.path, true)?;
-    let project = without_socket(ctx, &storage, project, true)?;
+    let project = without_socket(ctx, &storage, project, true, false)?;
     let mut enc = Lazy::new(ctx.socket.clone());
     Ok(match check(&storage, &project, &mut enc, true)? {
         Outcome::InSync => 0,
@@ -742,7 +770,7 @@ fn dry(ctx: &Ctx, action: &str) -> Result<i32, String> {
     let project = load(ctx, false)?;
     let temp = Temp::create(&ctx.cwd, false)?;
     let storage = Storage::clone(&ctx.source, &temp.path, false)?;
-    let project = without_socket(ctx, &storage, project, false)?;
+    let project = without_socket(ctx, &storage, project, false, false)?;
     let mut enc = Lazy::new(ctx.socket.clone());
 
     let code = match check(&storage, &project, &mut enc, false)? {
@@ -796,7 +824,7 @@ pub fn push(ctx: &Ctx, yes: bool) -> Result<i32, String> {
 
     let temp = Temp::create(&ctx.cwd, false)?;
     let storage = Storage::clone(&ctx.source, &temp.path, false)?;
-    let project = without_socket(ctx, &storage, project, false)?;
+    let project = without_socket(ctx, &storage, project, false, true)?;
     storage_context(&storage, &project);
     let mut enc = Lazy::new(ctx.socket.clone());
     let mut missing = false;
@@ -991,7 +1019,7 @@ pub fn pull(ctx: &Ctx, yes: bool) -> Result<i32, String> {
     let project = load(ctx, false)?;
     let temp = Temp::create(&ctx.cwd, false)?;
     let storage = Storage::clone(&ctx.source, &temp.path, false)?;
-    let mut project = without_socket(ctx, &storage, project, false)?;
+    let mut project = without_socket(ctx, &storage, project, false, true)?;
     storage_context(&storage, &project);
     let mut enc = Lazy::new(ctx.socket.clone());
     let mut failed = false;
@@ -1020,7 +1048,7 @@ pub fn pull(ctx: &Ctx, yes: bool) -> Result<i32, String> {
                     config::CONFIG
                 ))
             );
-            project = without_socket(ctx, &storage, load(ctx, false)?, true)?;
+            project = without_socket(ctx, &storage, load(ctx, false)?, true, false)?;
         }
     }
 
@@ -1160,7 +1188,7 @@ pub fn state(ctx: &Ctx) -> Result<i32, String> {
         }
         let storage = storage.as_ref().unwrap();
 
-        let result = match without_socket(ctx, storage, loaded.project, false)
+        let result = match without_socket(ctx, storage, loaded.project, false, false)
             .and_then(|project| check(storage, &project, &mut enc, false))
         {
             Ok(Outcome::InSync) => {
