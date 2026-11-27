@@ -486,12 +486,12 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "gits events: the list, the defined ones with their value"
 
-# it needs neither the storage nor a project. 148 variables of events and GITS_EXIT
+# it needs neither the storage nor a project. 148 variables of events, GITS_START and GITS_EXIT
 COMMAND='(unset GITS_SOURCE; cd / && "${BIN}" events | grep -c "^  GITS_")'
-EXPECTED_STDOUT="149"
+EXPECTED_STDOUT="150"
 EXPECTED_STDERR=""
 EXPECTED_CODE="0"
-test "gits events works without GITS_SOURCE: 149 variables"
+test "gits events works without GITS_SOURCE: 150 variables"
 
 # events/examples/ in the repository is generated: it has to be what the binary writes
 COMMAND='gits events --examples "${WORK}/examples" && diff -r "${WORK}/examples" "${_ROOT}/events/examples" && ls "${WORK}/examples" | wc -l | tr -d " "'
@@ -589,3 +589,71 @@ EXPECTED_CODE="0"
 test "GITS_EXIT: in gits events and in --help"
 
 unset GITS_EXIT
+
+# ---------- GITS_START: once, the first thing of a command ----------
+
+# Not an event of a command either: one variable for every command, its script runs once,
+# before the event START. It gets: $1 START, $2 the command.
+cat <<'EEE' > "${WORK}/scripts/start.sh"
+echo "start script: >${1}< >${2}< >${3}< ${GITS_EVENT} ${GITS_EVENT_CAN_STOP}" >> "${LOG}"
+echo "printed by the start script"
+EEE
+export GITS_START="${WORK}/scripts/start.sh"
+
+# once, although the script of GITS_ALL is called for every event; before the event START;
+# what it prints goes to stderr
+rm -f "${LOG}"
+COMMAND='cd repo && GITS_ALL="${WORK}/scripts/log.sh" gits diff 2>&1 > /dev/null | has "printed by the start script"; head -2 "${LOG}"; grep -c "start script" "${LOG}"; grep -c "GITS_DIFF_" "${LOG}" | sed "s/^[0-9][0-9]*$/many/;s/^[0-9]$/few/"'
+EXPECTED_STDOUT="printed by the start script
+start script: >START< >diff< >< GITS_START 1
+GITS_DIFF_START (env)
+1
+many"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_START: once, before the event START, its output on stderr"
+
+# a script which fails stops the command: no event of the command happens, GITS_EXIT still runs
+rm -f "${LOG}"
+COMMAND='cd repo && GITS_START="${WORK}/scripts/fail.sh" GITS_ALL="${WORK}/scripts/log.sh" GITS_EXIT="${WORK}/scripts/exit.sh" gits diff 2>&1 > /dev/null | has "GITS_START: script >${WORK}/scripts/fail.sh< ended with exit code 7"; echo "code ${PIPESTATUS[0]}"; grep -c "GITS_DIFF_START\|BEFORE_CLONE" "${LOG}"; grep "exit script" "${LOG}"'
+EXPECTED_STDOUT="GITS_START: script >${WORK}/scripts/fail.sh< ended with exit code 7
+code 1
+0
+exit script: >EXIT< >diff< >1< GITS_EXIT 1"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_START: a failing script stops the command, GITS_EXIT still runs"
+
+# also a script which doesn't exist
+COMMAND='cd repo && GITS_START="/no/such.sh" gits diff 2>&1 > /dev/null | has "GITS_START: script >/no/such.sh< doesn'"'"'t exist"; echo "code ${PIPESTATUS[0]}"'
+EXPECTED_STDOUT="GITS_START: script >/no/such.sh< doesn't exist
+code 1"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_START: a missing script stops the command"
+
+# not where no command has events: --help, list, events, an unknown command
+rm -f "${LOG}"; touch "${LOG}"
+COMMAND='gits --help > /dev/null 2>&1; gits list > /dev/null 2>&1; gits events > /dev/null 2>&1; gits nonsense > /dev/null 2>&1; grep -c "start script" "${LOG}"'
+EXPECTED_STDOUT="0"
+EXPECTED_STDERR=""
+EXPECTED_CODE="1"
+test "GITS_START: not for --help, list, events, unknown command"
+
+# gits started from inside of a script doesn't run it: one line, of the outer gits
+rm -f "${LOG}"
+COMMAND='cd repo && GITS_URL_END="${WORK}/scripts/nested.sh" gits url > /dev/null 2>&1; grep -c "start script" "${LOG}"'
+EXPECTED_STDOUT="1"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_START: not run by a nested gits"
+
+# listed by gits events and by the table of --help
+COMMAND='gits events 2> /dev/null | grep "^  GITS_START " | tr -s " "; gits --help 2> /dev/null | grep "^  GITS_START=\"" | tr -s " "'
+EXPECTED_STDOUT=" GITS_START ${WORK}/scripts/start.sh
+ GITS_START=\"${WORK}/scripts/start.sh\" | (none) | ${WORK}/scripts/start.sh"
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "GITS_START: in gits events and in --help"
+
+unset GITS_START

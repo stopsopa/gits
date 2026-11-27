@@ -7,23 +7,23 @@ socket. Here that process lives only as long as one `gits` command:
 ```
 /bin/bash examples/encrypt/gits.sh diff
         |
-        |  defines the env vars (env.sh), GITS_ALL=start.sh, GITS_EXIT=stop.sh, starts the gits binary
+        |  defines the env vars (env.sh), GITS_START=start.sh, GITS_EXIT=stop.sh, starts the gits binary
         v
-      gits ---- GITS_ALL -------> start.sh START   ssh-agent with the key + server.ts on the socket
-        |       (first event)                      + a test: a file encrypted, decrypted, compared.
-        |                                          gits waits. A failure stops gits.
+      gits ---- GITS_START -----> start.sh   once, before anything else:
+        |                                    ssh-agent with the key + server.ts on the socket
+        |                                    + a test: a file encrypted, decrypted, compared.
+        |                                    gits waits. A failure stops gits.
         |
         |  ... the command itself: encode / decode requests to the socket ...
-        |      (start.sh is called for every next event too, and does nothing)
         |
-        +------ GITS_EXIT ------> stop.sh          server and agent stopped, sockets removed.
-                                                   Always: also after an error, Ctrl+C, kill.
+        +------ GITS_EXIT ------> stop.sh    once, the last thing:
+                                             server and agent stopped, sockets removed.
+                                             Always: also after an error, Ctrl+C, kill.
 ```
 
-`START` is not a variable: it is the name of the first event of every command, the first argument
-`start.sh` gets. `GITS_ALL` is the script of every event of every command, so one variable is enough
-here; the variable of that one event alone would be `GITS_DIFF_START`, `GITS_PUSH_START`, ... one
-for each command (see `gits --help`).
+`GITS_START` and `GITS_EXIT` are not lifecycle events of a command (those are
+`GITS_DIFF_START`, `GITS_PUSH_BEFORE_COPY`, ... see `gits --help`): each is one variable for
+every command, and its script runs exactly once in one start of gits.
 
 Everything is in `examples/encrypt/`:
 
@@ -53,65 +53,34 @@ Your own ssh-agent and your own keys are not touched: the demo has an agent of i
 
 All commands below are run from the root of this repository.
 
-## 1. The variables: env.sh
+## The order
 
-| Variable | Default | |
+`reset_setup.sh` is the preparation of everything, and the way back to the beginning. Nothing
+else has to be prepared by hand:
+
+| Step | | Before it |
 |---|---|---|
-| `GITS_SOURCE` | `examples/encrypt/gits_source` | **the storage.** gits reads it. Always the one of the demo: `GITS_SOURCE` of your terminal (your real storage) is ignored, the demo can't push there. Another one: `GITS_DEMO_SOURCE` |
-| `GITS_ENCRYPTION_SOCKET` | `examples/encrypt/tmp/ssenc.sock` | **the socket.** gits reads it: where it sends its requests. At most about 100 characters |
-| `GITS_DEMO_SSH_KEY` | `key` = `examples/encrypt/tmp/key` | the ssh key which encrypts and which opens what is stored (private key file, the public one is `<file>.pub`). Only `start.sh` and `server.ts` use it. A name without a directory is a file in `tmp/`: `GITS_DEMO_SSH_KEY=key2` |
-| `GITS_DEMO_NEW_SSH_KEY` | not defined | only for `gits crypt rekey`: the key the stored files get in place of `GITS_DEMO_SSH_KEY` |
-| `GITS_DEMO_NO_SOCKET` | not defined | `1`: the wrapper starts gits without `GITS_ENCRYPTION_SOCKET` and without `start.sh` / `stop.sh` |
-| `GITS_DEMO_LOG` | `examples/encrypt/server.log` | log of the server. Empty (`GITS_DEMO_LOG=""`): no log |
-| `GITS_DEMO_AGENT` | `examples/encrypt/tmp/agent.sock` | socket of the ssh-agent of the demo |
-| `GITS_DEMO_ENCRYPT` | `__linked/STOPSOPA__encrypt/STOPSOPA__encrypt` | checkout of the encrypt repository |
-| `GITS_DEMO_BIN` | `bin/<arch>/gits` | the gits binary `gits.sh` starts |
-| `GITS_DEMO_WORK` | `examples/encrypt` | where everything generated goes: `gits_source/`, `repoa/`, `repob/`, `tmp/`, `server.log` |
-| `GITS_DEMO_TMP` | `examples/encrypt/tmp` | keys, sockets, pid files |
+| 1 | `reset_setup.sh`: state 0 | nothing. **Always the first command** |
+| 2, 3 | the variables and the keys | only reading |
+| 4 | the server by hand | step 1 once (it needs the keys) |
+| 5 | gits through the wrapper | step 1. Played before? run `reset_setup.sh` again: the step expects an empty storage |
+| 6 | the whole storage plain / encrypted / another key | `reset_setup.sh` again (the first command of the step) |
+| 7 | rekey | `reset_setup.sh` again (the first command of the step) |
 
-A variable defined in the terminal wins over the default (besides `GITS_SOURCE`): `GITS_DEMO_LOG="" /bin/bash examples/encrypt/gits.sh diff`.
+Steps 5, 6 and 7 are three independent ways through, each one starts from state 0. Whenever
+something doesn't look like the guide says (a file not in sync, an `AUTH` error because the
+storage is stored with `key2` from an earlier step): `/bin/bash examples/encrypt/reset_setup.sh`
+and start the step again. It can be run at any moment and as many times as you want; it removes
+only what it generated itself.
 
-## 2. The keys: keys.sh
-
-```sh
-/bin/bash examples/encrypt/keys.sh        # examples/encrypt/tmp/key + key.pub and key2 + key2.pub, no passphrase
-/bin/bash examples/encrypt/keys.sh        # already there: nothing is changed
-```
-
-`key` is the one in use, `key2` is there to change to (steps 6 and 7).
-
-`reset_setup.sh` (step 4) calls it too, after it removed the old key.
-
-## 3. The server and the socket by hand: start.sh, stop.sh
-
-Not needed for the rest (gits will call them), only to see what they do.
-
-```sh
-/bin/bash examples/encrypt/start.sh; echo "exit code $?"     # 0: the encryption works
-ls examples/encrypt/tmp                   # agent.pid agent.sock key key.pub key2 key2.pub server.pid ssenc.sock
-cat examples/encrypt/server.log           # listening on ..., then the test: one file encrypted, one decrypted
-```
-
-`start.sh` does three things and ends only when all of them worked:
-
-1. an ssh-agent listening on `examples/encrypt/tmp/agent.sock`, with the key loaded
-2. `node examples/encrypt/server.ts` in the background, listening on `GITS_ENCRYPTION_SOCKET`
-3. `node examples/encrypt/server.ts test`: through the socket a file is encrypted, decrypted and compared
-
-```sh
-/bin/bash examples/encrypt/stop.sh        # prints nothing
-ls examples/encrypt/tmp                   # key key.pub key2 key2.pub: no sockets, no pid files, nothing runs
-/bin/bash examples/encrypt/stop.sh        # again: nothing to stop, still exit code 0
-```
-
-## 4. State 0: reset_setup.sh
+## 1. State 0: reset_setup.sh
 
 ```sh
 /bin/bash examples/encrypt/reset_setup.sh
 ```
 
-Run it at the beginning, and again whenever you want to start from scratch. It stops what
-runs, removes everything generated and creates it again:
+The first command of the demo, and again whenever you want to start from scratch (see
+[the order](#the-order)). It stops what runs, removes everything generated and creates it again:
 
 | | |
 |---|---|
@@ -136,12 +105,71 @@ GITS_LIST=(
 )
 ```
 
-Nothing is pushed yet. The remote `origin` of the projects (`git@github.com:demo/repoa.git`)
+It ends with `state 0 is ready`. Nothing is pushed yet. The remote `origin` of the projects (`git@github.com:demo/repoa.git`)
 is never contacted: gits only takes the name of the directory in the storage from it.
+
+## 2. The variables: env.sh
+
+| Variable | Default | |
+|---|---|---|
+| `GITS_SOURCE` | `examples/encrypt/gits_source` | **the storage.** gits reads it. Always the one of the demo: `GITS_SOURCE` of your terminal (your real storage) is ignored, the demo can't push there. Another one: `GITS_DEMO_SOURCE` |
+| `GITS_ENCRYPTION_SOCKET` | `examples/encrypt/tmp/ssenc.sock` | **the socket.** gits reads it: where it sends its requests. At most about 100 characters |
+| `GITS_DEMO_SSH_KEY` | `key` = `examples/encrypt/tmp/key` | the ssh key which encrypts and which opens what is stored (private key file, the public one is `<file>.pub`). Only `start.sh` and `server.ts` use it. A name without a directory is a file in `tmp/`: `GITS_DEMO_SSH_KEY=key2` |
+| `GITS_DEMO_NEW_SSH_KEY` | not defined | only for `gits crypt rekey`: the key the stored files get in place of `GITS_DEMO_SSH_KEY` |
+| `GITS_DEMO_NO_SOCKET` | not defined | `1`: the wrapper starts gits without `GITS_ENCRYPTION_SOCKET` and without `start.sh` / `stop.sh` |
+| `GITS_DEMO_LOG` | `examples/encrypt/server.log` | log of the server. Empty (`GITS_DEMO_LOG=""`): no log |
+| `GITS_DEMO_AGENT` | `examples/encrypt/tmp/agent.sock` | socket of the ssh-agent of the demo |
+| `GITS_DEMO_ENCRYPT` | `__linked/STOPSOPA__encrypt/STOPSOPA__encrypt` | checkout of the encrypt repository |
+| `GITS_DEMO_BIN` | `bin/<arch>/gits` | the gits binary `gits.sh` starts |
+| `GITS_DEMO_WORK` | `examples/encrypt` | where everything generated goes: `gits_source/`, `repoa/`, `repob/`, `tmp/`, `server.log` |
+| `GITS_DEMO_TMP` | `examples/encrypt/tmp` | keys, sockets, pid files |
+
+A variable defined in the terminal wins over the default (besides `GITS_SOURCE`): `GITS_DEMO_LOG="" /bin/bash examples/encrypt/gits.sh diff`.
+
+## 3. The keys: keys.sh
+
+Step 1 created them, there is nothing to run here:
+
+```sh
+ls examples/encrypt/tmp                   # key key.pub key2 key2.pub
+```
+
+`key` is the one in use, `key2` is there to change to (steps 6 and 7). Both without a passphrase.
+
+`reset_setup.sh` removes them and calls `keys.sh` for new ones, so after every reset the keys are
+different: what an older storage was encrypted with is gone together with that storage.
+`keys.sh` by itself only creates a key which is missing and never replaces one:
+
+```sh
+/bin/bash examples/encrypt/keys.sh        # both are there: nothing is changed
+```
+
+## 4. The server and the socket by hand: start.sh, stop.sh
+
+Not needed for the rest (gits will call them), only to see what they do. It needs the keys of step 1.
+
+```sh
+/bin/bash examples/encrypt/start.sh; echo "exit code $?"     # 0: the encryption works
+ls examples/encrypt/tmp                   # agent.pid agent.sock key key.pub key2 key2.pub server.pid ssenc.sock
+cat examples/encrypt/server.log           # listening on ..., then the test: one file encrypted, one decrypted
+```
+
+`start.sh` does three things and ends only when all of them worked:
+
+1. an ssh-agent listening on `examples/encrypt/tmp/agent.sock`, with the key loaded
+2. `node examples/encrypt/server.ts` in the background, listening on `GITS_ENCRYPTION_SOCKET`
+3. `node examples/encrypt/server.ts test`: through the socket a file is encrypted, decrypted and compared
+
+```sh
+/bin/bash examples/encrypt/stop.sh        # prints nothing
+ls examples/encrypt/tmp                   # key key.pub key2 key2.pub: no sockets, no pid files, nothing runs
+/bin/bash examples/encrypt/stop.sh        # again: nothing to stop, still exit code 0
+```
 
 ## 5. gits through the wrapper
 
-From here it is yours to play with. One way through:
+From here it is yours to play with. One way through, from state 0 (if you already pushed
+something: `/bin/bash examples/encrypt/reset_setup.sh` first):
 
 ```sh
 cd examples/encrypt
@@ -199,10 +227,11 @@ an encrypted one (a text file starting with the lines `#ssenc1 ...` + `#slot ...
 | **no `GITS_ENCRYPTION_SOCKET`** | `:e:` is ignored: transported as it is | error: the socket is needed |
 | **`GITS_ENCRYPTION_SOCKET`** | used as it is; the next push encrypts it | decrypted / encrypted through the socket |
 
-and `gits crypt` changes the form of what is already stored. Start from scratch, from `examples/encrypt`:
+and `gits crypt` changes the form of what is already stored. Start from scratch (the storage
+of step 5 is already encrypted, this step begins with an empty one):
 
 ```sh
-cd examples/encrypt
+cd examples/encrypt                       # skip when you are already there
 /bin/bash reset_setup.sh
 ```
 
@@ -280,7 +309,7 @@ In step 6 the storage was plain for a moment (one commit with every secret reada
 `gits crypt rekey` goes from one key to another directly. From scratch again:
 
 ```sh
-/bin/bash reset_setup.sh                  # still in examples/encrypt
+/bin/bash reset_setup.sh                  # still in examples/encrypt: new keys, empty storage
 (cd repoa && /bin/bash ../gits.sh push --yes)
 (cd repob && /bin/bash ../gits.sh push --yes)
 /bin/bash gits.sh crypt status all        # encrypted: 4, the fingerprint of key
@@ -323,18 +352,17 @@ The substance of the wrapper, [gits.sh](gits.sh):
 
 ```sh
 source "${_DIR}/env.sh"                    # GITS_SOURCE, GITS_ENCRYPTION_SOCKET and the rest
-export GITS_ALL="${_DIR}/start.sh"
+export GITS_START="${_DIR}/start.sh"
 export GITS_EXIT="${_DIR}/stop.sh"
 "${GITS_DEMO_BIN}" "${@}"
 ```
 
 - **`GITS_SOURCE`**: the storage, here `gits_source/`.
 - **`GITS_ENCRYPTION_SOCKET`**: where gits sends `encode "<file>" "<file>"` / `decode ...`.
-- **`GITS_ALL`** is the script of every [lifecycle event](../../LIFECYCLE.md). `start.sh` looks at
-  its first argument and does something only for `START`, the first event of every command.
-  gits waits for a script of an event, and a `START` script which fails stops the command:
-  gits goes on only when the test of the encryption passed.
-- **`GITS_EXIT`** is not an event of a command: its script runs as the last thing of every
+- **`GITS_START`**: its script runs once, as the first thing of a command, before any of its
+  [lifecycle events](../../LIFECYCLE.md). gits waits for it, and a script which fails stops the
+  command: gits goes on only when the test of the encryption passed.
+- **`GITS_EXIT`**: its script runs once, as the last thing of every
   start of gits, like `trap ... EXIT` in a shell. After a command which worked or failed, after
   Ctrl+C, `kill` (SIGTERM), a closed terminal (SIGHUP). Only `kill -9` can't be caught by anything.
 
@@ -355,12 +383,12 @@ sed -i.bak '/^sleep 10$/d' .git/gits.sh && rm .git/gits.sh.bak
 cd ..
 ```
 
-Commands without lifecycle events (`--help`, `--version`, `events`, `list`) have no `START`:
+For what has no lifecycle events (`--help`, `--version`, `events`, `list`) `GITS_START` is not run:
 nothing is started for them, and `stop.sh` finds nothing to stop.
 
 ## 9. For real
 
-- your key is already in your own agent: in `start.sh` drop the two commands of step 1
+- your key is already in your own agent: in `start.sh` drop the two commands of its part 1
   (`ssh-agent`, `ssh-add`), in `stop.sh` the line of the agent, and point `GITS_DEMO_SSH_KEY`
   to your key (`~/.ssh/id_ed25519`); the server then asks the agent of `SSH_AUTH_SOCK`
 - `alias gits='/bin/bash /path/to/examples/encrypt/gits.sh'`

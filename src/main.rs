@@ -202,6 +202,16 @@ fn env_rows() -> Vec<Row> {
         false,
     ));
     rows.push(Row::Var(
+        in_shell(events::ENV_START),
+        "(none)".to_string(),
+        match util::env(events::ENV_START) {
+            Some(_) if nested => format!("(ignored: {} is defined)", events::ENV_RUNNING),
+            Some(value) => util::expand_tilde(&value).display().to_string(),
+            None => "(no script)".to_string(),
+        },
+        false,
+    ));
+    rows.push(Row::Var(
         in_shell(events::ENV_EXIT),
         "(none)".to_string(),
         match util::env(events::ENV_EXIT) {
@@ -404,6 +414,10 @@ Lifecycle events: your scripts run between the stages of every command (see LIFE
                            write an example script of every event (with everything it gets
                            documented at its top) into the directory
 
+  GITS_START=<script>      not an event of a command: the script runs once, as the first thing
+                           of a command which has events (before its event START). gits waits
+                           for it, a failure stops the command. $1 START, $2 command
+
   GITS_EXIT=<script>       not an event of a command: the script runs as the last thing of
                            every start of gits (also after an error, Ctrl+C, kill; not kill -9),
                            like "trap ... EXIT" of a shell. $1 EXIT, $2 command, $3 exit code
@@ -430,6 +444,7 @@ fn dispatch(
     encrypt: bool,
     cwd: PathBuf,
 ) -> Result<i32, String> {
+    events::start(command, &cwd)?;
     events::fire("START", &[], &[])?;
 
     if command == "update" {

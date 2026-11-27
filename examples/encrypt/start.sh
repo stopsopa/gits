@@ -8,19 +8,14 @@
 #
 # Exit code 0: gits can use the socket. Anything else: an error was printed.
 #
-# gits.sh registers it as the lifecycle script of every event (GITS_ALL), and START is the
-# first event of every command: gits waits for this script, and when it fails gits stops.
+# gits.sh registers it in GITS_START: gits runs it once, as the first thing of a command,
+# waits for it, and when it fails gits stops.
 # By hand (from any directory), stop it with stop.sh:
 #
 #   /bin/bash examples/encrypt/start.sh
 #
 # All variables: env.sh
 #
-
-# as a lifecycle script: $1 is the event, and only START is the moment for it
-if [[ "${1:-START}" != "START" ]]; then
-  exit 0
-fi
 
 _SHELL="$(ps -p $$ -o comm=)"; # bash || sh || zsh
 _SHELL="$(basename ${_SHELL//-/})"

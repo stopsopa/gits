@@ -306,10 +306,23 @@ Not in the original. `GITS_EXIT=<script>`: the last thing of every start of gits
 - listed by `gits --help` (table of env vars) and `gits events`
 - code: `src/events.rs` (`exit`), `src/main.rs`; tests: `tests/test013`, `tests/test010` (after Ctrl+C)
 
+# GITS_START: a script which runs once at the beginning
+
+Not in the original. `GITS_START=<script>`: the counterpart of `GITS_EXIT`.
+
+- once, the first thing of a command which has lifecycle events, before its event `START`.
+  Not for `--help`, `--version`, `events`, `list`, an unknown command
+- gits waits for it; a script which fails or doesn't exist stops the command (`GITS_EXIT` still runs)
+- `$1` `START`, `$2` the command. Only from the environment, no `*_ALL`, its output goes to
+  stderr. Not run by a nested gits
+- why: a script in `GITS_ALL` is called for every event of a command, so many times
+- listed by `gits --help` and `gits events`
+- code: `src/events.rs` (`start`, `global`), `src/main.rs` (`dispatch`); tests: `tests/test013`
+
 # examples/encrypt/ENCRYPT_PROCESS.md
 
 A self-contained demo of encryption which lives exactly as long as one gits command:
-`examples/encrypt/gits.sh` (wrapper) registers `examples/encrypt/start.sh` for `START` (through `GITS_ALL`) and
+`examples/encrypt/gits.sh` (wrapper) registers `examples/encrypt/start.sh` in `GITS_START` and
 `examples/encrypt/stop.sh` in `GITS_EXIT`. `start.sh` starts an ssh-agent of its own with the demo key
 and `examples/encrypt/server.ts` (the simplest server of the socket protocol) and tests the encryption
 through the socket before gits goes on. All variables: `examples/encrypt/env.sh`, the key: `examples/encrypt/keys.sh`.

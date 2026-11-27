@@ -983,7 +983,31 @@ pub fn fire(event: &str, args: &[String], extra: &[(&str, String)]) -> Result<()
     Ok(())
 }
 
+pub const ENV_START: &str = "GITS_START";
 pub const ENV_EXIT: &str = "GITS_EXIT";
+
+/**
+ * GITS_START: a script which runs ONCE, as the first thing of a command which has lifecycle
+ * events, just before its event START (so not for --help, --version, events, list or an unknown
+ * command: nothing starts there). gits waits for it, and a script which fails or doesn't exist
+ * stops the command before anything is done (GITS_EXIT still runs).
+ *
+ * The counterpart of GITS_EXIT, and like it not one of the events of a command: only the
+ * environment defines it (not a config), *_ALL scripts are not called for it.
+ * Like every script: not run by a gits which was started from inside of a script.
+ *
+ *   $1 START   $2 the command
+ */
+pub fn start(command: &str, pwd: &Path) -> Result<(), String> {
+    // an unknown command has no events
+    if defs(command).is_empty() {
+        return Ok(());
+    }
+    match global(ENV_START, "START", command, pwd, None) {
+        Some(problem) => Err(format!("{ENV_START}: {problem}")),
+        None => Ok(()),
+    }
+}
 
 /**
  * GITS_EXIT: a script which runs as the very last thing of EVERY start of gits, like
@@ -998,70 +1022,74 @@ pub const ENV_EXIT: &str = "GITS_EXIT";
  *   $1 EXIT   $2 the command ("" when there was none)   $3 the exit code
  */
 pub fn exit(command: &str, pwd: &Path, code: i32) {
-    if env(ENV_RUNNING).is_some() {
-        return;
-    }
-    let Some(script) = env(ENV_EXIT) else {
-        return;
-    };
-    let path = script_path(&script, pwd);
-    let problem = if !path.is_file() {
-        Some(format!("script >{}< doesn't exist", path.display()))
-    } else {
-        // what the events of the command knew (empty when the command has no events)
-        let context: Vec<(String, String)> = STATE
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|s| s.context.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-            .unwrap_or_default();
-        let mut options = Options::new().pwd(pwd).forward_stderr();
-        for (name, value) in &context {
-            options = options.env(name, value);
-        }
-        // stdout of gits can be data (isinsync, list, find): what the script prints goes to stderr
-        options = options
-            .env("GITS_EVENT", ENV_EXIT)
-            .env("GITS_EVENT_NAME", "EXIT")
-            .env("GITS_EVENT_COMMAND", command)
-            .env("GITS_EVENT_PWD", pwd)
-            .env("GITS_EVENT_EXIT_CODE", code.to_string())
-            .env("GITS_EVENT_CAN_STOP", "0")
-            .env("GITS_EVENT_TRIGGER", ENV_EXIT)
-            .env("GITS_EVENT_TRIGGER_FROM", "env")
-            .env("GITS_EVENT_SCRIPT", &path)
-            .env(ENV_RUNNING, "1")
-            .on_stdout(|chunk| {
-                let mut err = std::io::stderr();
-                let _ = err.write_all(chunk);
-                let _ = err.flush();
-            });
-        let shell = config::shell();
-        let all = [
-            path.display().to_string(),
-            "EXIT".to_string(),
-            command.to_string(),
-            code.to_string(),
-        ];
-        match cli(&shell, &all, options) {
-            Ok(out) if out.success() => None,
-            Ok(out) => Some(format!(
-                "script >{}< ended with {}",
-                path.display(),
-                out.status()
-            )),
-            Err(e) => Some(format!(
-                "can't run >{}< with shell {}=>{shell}<: {e}",
-                path.display(),
-                config::ENV_SHELL
-            )),
-        }
-    };
-    if let Some(problem) = problem {
+    if let Some(problem) = global(ENV_EXIT, "EXIT", command, pwd, Some(code)) {
         eprintln!(
             "{}",
             yellow(&format!("gits warning: {ENV_EXIT}: {problem}"))
         );
+    }
+}
+
+// the script of GITS_START (code: None) or GITS_EXIT (code: the exit code of gits).
+// Some: what went wrong
+fn global(variable: &str, name: &str, command: &str, pwd: &Path, code: Option<i32>) -> Option<String> {
+    if env(ENV_RUNNING).is_some() {
+        return None;
+    }
+    let script = env(variable)?;
+    let path = script_path(&script, pwd);
+    if !path.is_file() {
+        return Some(format!("script >{}< doesn't exist", path.display()));
+    }
+    // what the events of the command knew (empty when the command has no events)
+    let context: Vec<(String, String)> = STATE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|s| s.context.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+        .unwrap_or_default();
+    let mut options = Options::new().pwd(pwd).forward_stderr();
+    for (name, value) in &context {
+        options = options.env(name, value);
+    }
+    let mut all = vec![
+        path.display().to_string(),
+        name.to_string(),
+        command.to_string(),
+    ];
+    if let Some(code) = code {
+        options = options.env("GITS_EVENT_EXIT_CODE", code.to_string());
+        all.push(code.to_string());
+    }
+    // stdout of gits can be data (isinsync, list, find): what the script prints goes to stderr
+    options = options
+        .env("GITS_EVENT", variable)
+        .env("GITS_EVENT_NAME", name)
+        .env("GITS_EVENT_COMMAND", command)
+        .env("GITS_EVENT_PWD", pwd)
+        .env("GITS_EVENT_CAN_STOP", if code.is_none() { "1" } else { "0" })
+        .env("GITS_EVENT_TRIGGER", variable)
+        .env("GITS_EVENT_TRIGGER_FROM", "env")
+        .env("GITS_EVENT_SCRIPT", &path)
+        .env(ENV_RUNNING, "1")
+        .on_stdout(|chunk| {
+            let mut err = std::io::stderr();
+            let _ = err.write_all(chunk);
+            let _ = err.flush();
+        });
+    let shell = config::shell();
+    match cli(&shell, &all, options) {
+        Ok(out) if out.success() => None,
+        Ok(out) => Some(format!(
+            "script >{}< ended with {}",
+            path.display(),
+            out.status()
+        )),
+        Err(e) => Some(format!(
+            "can't run >{}< with shell {}=>{shell}<: {e}",
+            path.display(),
+            config::ENV_SHELL
+        )),
     }
 }
 
@@ -1207,6 +1235,10 @@ pub fn table() -> String {
     };
     out.push_str(&format!("  {:<28} {}\n", "GITS_ALL", shown("GITS_ALL")));
     out.push_str("      every event of every command\n\n");
+    out.push_str(&format!("  {:<28} {}\n", ENV_START, shown(ENV_START)));
+    out.push_str(
+        "      not an event: once, the first thing of a command which has events, before its START. Can stop it\n\n",
+    );
     out.push_str(&format!("  {:<28} {}\n", ENV_EXIT, shown(ENV_EXIT)));
     out.push_str(
         "      not an event: the last thing of every start of gits, however it ends (like trap EXIT)\n\n",

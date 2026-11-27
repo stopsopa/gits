@@ -11,8 +11,8 @@
 #   GITS_SOURCE              (env.sh) the storage: examples/encrypt/gits_source, created by
 #                            reset_setup.sh. GITS_SOURCE of your terminal is ignored
 #   GITS_ENCRYPTION_SOCKET   (env.sh) the socket gits sends its encode / decode requests to
-#   GITS_ALL=start.sh        script of every lifecycle event; start.sh reacts to START, the first
-#                            event of a command: agent + server + a test, gits waits for it
+#   GITS_START=start.sh      once, the first thing of a command: agent + server + a test.
+#                            gits waits for it, and a failure stops gits
 #   GITS_EXIT=stop.sh        the last thing of every start of gits, however it ends
 #
 # GITS_DEMO_NO_SOCKET=1 /bin/bash examples/encrypt/gits.sh push --yes
@@ -49,7 +49,7 @@ if [[ -n "${GITS_DEMO_NO_SOCKET}" ]]; then
   # gits as if there was no encoder process at all: it ignores ':e:', nothing is started
   unset GITS_ENCRYPTION_SOCKET
 else
-  export GITS_ALL="${_DIR}/start.sh"
+  export GITS_START="${_DIR}/start.sh"
   export GITS_EXIT="${_DIR}/stop.sh"
 fi
 

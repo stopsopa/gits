@@ -92,7 +92,7 @@ files, and, only for a rotation, the new keys:
 
 - without a new key a `rekey` / `rewrap` request answers `error USAGE`
 - a file which the key in use doesn't open answers `error AUTH`
-- a rotation server lives for one command: `START` starts it with both keys, `GITS_EXIT` stops it
+- a rotation server lives for one command: `GITS_START` starts it with both keys, `GITS_EXIT` stops it
 - gits never sends the same path as input and output: the result is written next to the
   file and renamed after a successful reply, so a failed request leaves the file as it was
 

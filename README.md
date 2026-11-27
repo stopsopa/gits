@@ -268,10 +268,11 @@ gits events                              # every event of every command, and whi
 gits events --examples <directory>       # an example script of every event, its context documented at the top
 ```
 
-One more variable is not an event of a command: the script of `GITS_EXIT` runs as the last
-thing of every start of gits, however it ended (error, Ctrl+C, `kill`), like `trap ... EXIT` of
-a shell. A complete example with both, an encryption server started at `START` and stopped by
-`GITS_EXIT`: [examples/encrypt/ENCRYPT_PROCESS.md](examples/encrypt/ENCRYPT_PROCESS.md).
+Two more variables are not events of a command, and their scripts run exactly once: the
+script of `GITS_START` as the first thing of a command (gits waits for it, a failure stops the
+command), the script of `GITS_EXIT` as the last thing of every start of gits, however it ended
+(error, Ctrl+C, `kill`), like `trap ... EXIT` of a shell. A complete example with both, an
+encryption server started by `GITS_START` and stopped by `GITS_EXIT`: [examples/encrypt/ENCRYPT_PROCESS.md](examples/encrypt/ENCRYPT_PROCESS.md).
 
 **Everything about them, with a graph of every command: [LIFECYCLE.md](LIFECYCLE.md).**
 Example scripts: [events/examples/](events/examples/).
@@ -456,6 +457,7 @@ and one variable per lifecycle event) in three columns:
 | `GITS_ENCRYPTION_SOCKET` | | unix socket of the encoder process. Not defined: `:e:` is ignored, files are transported as they are (an error only when a file is already stored encrypted) |
 | `GITS_TEMPLATE` | built-in | url or file: template for `gits init`. Its line `GITS_TARGETDIR=...` is replaced |
 | `GITS_PULL_TO_SYNC` | | directory (absolute or `~/...`) where the clone of the storage is kept between the runs, for every command. Not defined: a fresh clone in a directory with a random name in the current directory, removed at the end. Defined: the first command clones there, the next ones run `git fetch` and put the clone back to what origin has, on the branch the clone started with (the default branch of the storage); whatever was left there (local commits, untracked files) is thrown away, also at the end of every command. A directory which is not empty and not a clone of `GITS_SOURCE` is refused and not touched. Don't run two gits commands at the same time with it: they would share the directory. Not an event of `pull`, despite the name |
+| `GITS_START` | | path of a script which runs **once**, as the first thing of a command which has lifecycle events, before its event `START` (not for `--help`, `--version`, `events`, `list`). gits waits for it; when it fails or doesn't exist the command stops before doing anything. `$1` `START`, `$2` the command. See [LIFECYCLE.md](LIFECYCLE.md#gits_start-once-at-the-beginning) |
 | `GITS_EXIT` | | path of a script which runs as the last thing of **every** start of gits, however it ends: success, error, Ctrl+C, `kill`, closed terminal (not `kill -9`). Like `trap ... EXIT` of a shell. `$1` `EXIT`, `$2` the command, `$3` the exit code. See [LIFECYCLE.md](LIFECYCLE.md#gits_exit-always-at-the-end) |
 | `GITS_<COMMAND>_<EVENT>`, `GITS_<COMMAND>_ALL`, `GITS_ALL` | | path of a lifecycle script, see [LIFECYCLE.md](LIFECYCLE.md) and `gits events` |
 | `GITS_RELEASES` | `https://github.com/stopsopa/gits/releases` | where `gits --update` takes releases from (url or directory) |

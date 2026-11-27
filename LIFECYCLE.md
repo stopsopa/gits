@@ -176,6 +176,30 @@ export GITS_FIND_FIND="~/.gits/events/find.sh"
 - `GITS_<COMMAND>_ALL` and `GITS_ALL` are not called for a replaceable event (they could not do
   its work), but the event is counted in `GITS_EVENT_SEQ`.
 
+## GITS_START: once at the beginning
+
+`GITS_START` is the path of one more script. It is **not an event of a command**: it runs
+**once**, as the first thing of a command which has lifecycle events, just before its event `START`.
+
+```sh
+export GITS_START="~/.gits/events/start.sh"
+```
+
+| | |
+|---|---|
+| when | for every command which has events (`state`, `diff`, `push`, `crypt`, ...). Not for `--help`, `--version`, `events`, `list`, an unknown command |
+| order | before the event `START` of the command (`GITS_<COMMAND>_START`, `*_ALL`), before anything is read or cloned |
+| arguments | `$1` `START`, `$2` the command |
+| env vars | `GITS_EVENT=GITS_START`, `GITS_EVENT_NAME=START`, `GITS_EVENT_COMMAND`, `GITS_EVENT_CAN_STOP=1`, `GITS_EVENT_PWD`, `GITS_EVENT_SCRIPT`, and what the command knows at that moment (`GITS_EVENT_ARGS`, ...) |
+| output | what the script prints goes to stderr of gits |
+| can | stop the command: gits waits for the script, and when it fails or doesn't exist gits ends with an error before doing anything. `GITS_EXIT` still runs |
+| defined | only in the environment, not in a config. `GITS_ALL` and `GITS_<COMMAND>_ALL` are not called for it |
+| nested | like every script: not run by a gits started from inside of a script |
+
+How it differs from the event `START`: that one belongs to a command (`GITS_PUSH_START`), and a
+script in `GITS_ALL` is called for every event of the command, so many times; `GITS_START` is one
+variable for every command and its script runs exactly once.
+
 ## GITS_EXIT: always at the end
 
 `GITS_EXIT` is the path of one more script. It is **not an event of a command**: it runs as
@@ -199,8 +223,8 @@ export GITS_EXIT="~/.gits/events/exit.sh"
 How it differs from `END`: `END` belongs to a command (`GITS_PUSH_END`, or all of them through
 `GITS_ALL`), `GITS_EXIT` is one variable for everything, also for what has no events.
 
-The pair `START` + `GITS_EXIT` is the way to have something running exactly as long as gits:
-[examples/encrypt/ENCRYPT_PROCESS.md](examples/encrypt/ENCRYPT_PROCESS.md) starts an encryption server at `START`,
+The pair `GITS_START` + `GITS_EXIT` is the way to have something running exactly as long as gits:
+[examples/encrypt/ENCRYPT_PROCESS.md](examples/encrypt/ENCRYPT_PROCESS.md) starts an encryption server in `GITS_START`,
 tests it, and stops it in `GITS_EXIT`.
 
 ## The lifecycle of every command
