@@ -400,9 +400,41 @@ it belongs to:
 
 ```sh
 /bin/bash gits.sh crypt decrypt --storage         # the list - but that is pretty useless, 
-/bin/bash gits.sh crypt decrypt --storage --yes   # one commit, one push
+/bin/bash gits.sh crypt decrypt --storage --yes   # clones remote to tempdir, decrypts all :e:, one commit, one push, rm tempdir
 # we will never want to decrypt all in GITS_SOURCE
+```
 
+The three scopes of `crypt decrypt`. All of them do the same afterwards (one clone of the
+storage, decrypting in the clone, one commit, one push), they differ only in which files are
+looked at:
+
+- **`crypt decrypt`**: run inside a project. gits reads the `.git/gits.sh` of that project,
+  takes only its `:e:` elements, and looks at those files in the storage. The ones stored
+  encrypted are decrypted. `::` elements and files of other projects are never looked at.
+- **`crypt decrypt all`**: the same, for many projects in one run:
+  1. gits looks below the current directory for every project which has a `.git/gits.sh` (the
+     search of `gits state`). From `examples/encrypt` it finds `repoa` and `repob`.
+  2. Every found config is executed and its `:e:` elements are collected into one list of paths
+     in the storage. A config which fails to load: an error which names the project, before
+     anything is cloned.
+  3. The storage is cloned once, every path of the list is checked, the encrypted ones are
+     decrypted.
+  4. One commit and one push for all projects together: `gits crypt decrypt (all, N files)`.
+
+  So it depends on where you run it: only the projects below the current directory, only their
+  `:e:` files. No project found: `nothing found`, exit code 0.
+- **`crypt decrypt --storage`**: no config is read at all. gits goes over every file of the
+  clone of `GITS_SOURCE` (without `.git`) and decrypts every one which is encrypted. The widest
+  of the three: also files of projects which are not on this machine, and files which are
+  encrypted but not marked `:e:` in any config any more.
+
+How a file is recognised as an encrypted one, in all three: gits reads its beginning in the
+clone. It has to be text (no NUL byte in the first 8000 bytes: encrypted output is always text,
+also of a binary file) and start with the line `#ssenc1 lines ...` or `#ssenc1 blob ...`
+followed by at least one `#slot ...` line. No key and no socket is needed for that. Everything
+else is left as it is.
+
+```sh
 cat "gits_source/git@github.com:demo__repoa.git/.env"                         # plain text again
 cmp repob/secrets/cert.bin "gits_source/git@github.com:demo__repob.git/secrets/cert.bin" && echo identical
 git -C gits_source log --oneline                  # gits crypt decrypt (storage, 4 files)
