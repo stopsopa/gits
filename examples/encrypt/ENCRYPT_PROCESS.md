@@ -353,6 +353,34 @@ git -C gits_source log --oneline                  # gits crypt decrypt (storage,
 below the current directory (only a config says what should be encrypted, so there is no
 `encrypt --storage`):
 
+What the next command does, step by step:
+
+1. **`GITS_DEMO_SSH_KEY=key2`**: for this one command the key of the demo is `tmp/key2`
+   (`env.sh` turns the name into the file). Nothing else knows about keys: not gits, not the storage.
+2. **`gits.sh`** defines `GITS_SOURCE`, `GITS_ENCRYPTION_SOCKET`, `GITS_START=start.sh`,
+   `GITS_EXIT=stop.sh` and starts the gits binary with `crypt encrypt all --yes`.
+3. **gits runs `start.sh`** (`GITS_START`, once, before anything else): an ssh-agent with `key2`
+   loaded, `server.js` listening on the socket, one file encrypted and decrypted as a test.
+4. **`all`: gits looks for configs.** Every `.git/gits.sh` below the current directory, here
+   `repoa` and `repob`. Each one is loaded and its `:e:` elements are collected: one file of
+   `repoa`, three of `repob`. A config is the only thing that says "this file should be encrypted".
+5. **gits clones the storage once**, into a temporary directory, and looks at how each of those
+   four files is stored: plain (after the decrypt above), already encrypted, or not there.
+   `encrypt` takes only the plain ones; the other two kinds are skipped.
+6. **For each plain file one request goes to the socket**: `encode "<file>" "<file>"`, both
+   paths inside the clone. gits waits for the reply before it sends the next one.
+7. **`server.js` starts the binary** for that request: `ssenc encrypt --mode auto --ssh-key
+   tmp/key2.pub -i <file> -o <file>`. `ssenc` decides text or binary by itself, asks the agent
+   for a signature made with `key2`, writes the encrypted file. The server replies `ok encode ...`
+   (or `error ...`: then gits stops and nothing is changed in the storage).
+8. **One commit, one push**: `gits crypt encrypt (all, 4 files)`. The storage now has the four
+   files encrypted with `key2`.
+9. **gits removes the clone and runs `stop.sh`** (`GITS_EXIT`): server and agent are stopped.
+
+What is encrypted is what was **stored** (the plain files in the storage). The local files in
+`repoa/` and `repob/` are not read and not changed. Without `--yes` steps 6 to 8 don't happen:
+gits only lists the files it would encrypt.
+
 ```sh
 GITS_DEMO_SSH_KEY=key2 /bin/bash gits.sh crypt encrypt all --yes
 # we will never want to decrypt all in GITS_SOURCE
