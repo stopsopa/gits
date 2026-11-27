@@ -46,6 +46,14 @@ mkdir -p "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp"
 # 1. The agent. It prints "SSH_AUTH_SOCK=...; SSH_AGENT_PID=...;": eval defines both, only
 #    inside of this script, so ssh-add and the server below talk to this agent.
 eval "$(ssh-agent -a "${GITS_DEMO_AGENT}")" > /dev/null
+
+# the agent didn't start (e.g. the path of the socket is too long): SSH_AUTH_SOCK is still the
+# one of your terminal, and ssh-add below would load the demo key into YOUR agent
+if [[ "${SSH_AUTH_SOCK}" != "${GITS_DEMO_AGENT}" ]]; then
+  echo "${0} error: ssh-agent didn't start on GITS_DEMO_AGENT=>${GITS_DEMO_AGENT}<, nothing was loaded anywhere"
+  exit 1
+fi
+
 echo "${SSH_AGENT_PID}" > "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/agent.pid"
 
 ssh-add -q "${GITS_ENCRYPTION_SSH_KEY}" || {

@@ -86,9 +86,9 @@ rm -rf "${W:?}/tmp" "${W:?}/server.log"
 
 # --- the storage. Not bare, so its files can be looked at: a push updates the files too
 
-rm -rf "${GITS_DEMO_SOURCE:?}"
-g init -q "${GITS_DEMO_SOURCE}" || fail "git init failed, GITS_DEMO_SOURCE=>${GITS_DEMO_SOURCE}<"
-g -C "${GITS_DEMO_SOURCE}" config receive.denyCurrentBranch updateInstead
+rm -rf "${GITS_SOURCE:?}"
+g init -q "${GITS_SOURCE}" || fail "git init failed, GITS_SOURCE=>${GITS_SOURCE}<"
+g -C "${GITS_SOURCE}" config receive.denyCurrentBranch updateInstead
 
 # --- repoa: .env and config/local.json are ignored by git
 

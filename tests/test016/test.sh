@@ -292,7 +292,7 @@ test "after it gits works without the socket"
 
 # ---------- 6. encrypt everything with another key ----------
 
-export GITS_ENCRYPTION_SSH_KEY="key2"
+export GITS_ENCRYPTION_SSH_KEY="${DEMO}/tmp/key2"
 
 COMMAND='cd "${DEMO}" && w crypt encrypt all --yes 2>&1 | has "4 files changed in the storage"; forms; with "$(fp key2)"; with "$(fp key)"'
 EXPECTED_STDOUT="4 files changed in the storage
@@ -349,7 +349,7 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="0"
 test "crypt rekey: refused by a server without new keys"
 
-export GITS_ENCRYPTION_REKEY_SSH_KEY="key2"
+export GITS_ENCRYPTION_REKEY_SSH_KEY="${DEMO}/tmp/key2"
 
 COMMAND='w crypt rekey --storage 2>&1 | has "would change in the storage" "  ${B}/secrets/cert.bin" "gits crypt rekey --storage --yes"; echo "$(( $(commits) - COMMITS )) commit"'
 EXPECTED_STDOUT="would change in the storage
@@ -385,7 +385,7 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "after rekey: the first key doesn't open"
 
-export GITS_ENCRYPTION_SSH_KEY="key2"
+export GITS_ENCRYPTION_SSH_KEY="${DEMO}/tmp/key2"
 
 # the content survived the rekey: pull brings back a removed local file, also the binary one
 COMMAND='w isinsync; echo "repoa ${?}"; cd "${DEMO}/repob" && cp secrets/cert.bin "${WORK}/cert.before" && rm secrets/cert.bin .env.local && w pull --yes 2>&1 | has "files pulled"; cmp secrets/cert.bin "${WORK}/cert.before" && cat .env.local'
@@ -399,7 +399,7 @@ test "after rekey: key2 opens, pull brings the same content"
 # ---------- 9. rewrap: only the key line ----------
 
 cp "${SRC}/${A}/.env" "${WORK}/env.before"
-export GITS_ENCRYPTION_REKEY_SSH_KEY="key"
+export GITS_ENCRYPTION_REKEY_SSH_KEY="${DEMO}/tmp/key"
 
 # this project only (its one :e: file). Line 2 is the key line, the rest is the content
 COMMAND='w crypt rekey --rewrap-only --yes 2>&1 | has "rekey --rewrap-only: '"'"'${A}/.env'"'"'" "1 files changed in the storage"; diff "${WORK}/env.before" "${SRC}/${A}/.env" | grep -c "^[<>]"; diff <(sed 2d "${WORK}/env.before") <(sed 2d "${SRC}/${A}/.env") && echo "content identical"'

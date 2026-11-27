@@ -132,10 +132,10 @@ is never contacted: gits only takes the name of the directory in the storage fro
 
 | Variable | Default | |
 |---|---|---|
-| `GITS_SOURCE` | `examples/encrypt/gits_source` | **the storage.** gits reads it. Always the one of the demo: `GITS_SOURCE` of your terminal (your real storage) is ignored, the demo can't push there. Another one: `GITS_DEMO_SOURCE` |
+| `GITS_SOURCE` | `examples/encrypt/gits_source` | **the storage.** gits reads it. Always the one of the demo: `GITS_SOURCE` of your terminal (your real storage) is ignored, the demo can't push there. Somewhere else: `GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES` |
 | `GITS_ENCRYPTION_SOCKET` | `examples/encrypt/tmp/ssenc.sock` | **the socket.** gits reads it: where it sends its requests. At most about 100 characters. Defined as an empty text (`GITS_ENCRYPTION_SOCKET= /bin/bash gits.sh ...`): no socket, the wrapper starts gits without it and without `start.sh` / `stop.sh` |
-| `GITS_ENCRYPTION_SSH_KEY` | `key` = `examples/encrypt/tmp/key` | the one variable which says which ssh key is used: it encrypts and it opens what is stored (private key file, the public one is `<file>.pub`). Only `start.sh` and `server.ts` use it. A name without a directory is a file in `tmp/`: `GITS_ENCRYPTION_SSH_KEY=key2` |
-| `GITS_ENCRYPTION_REKEY_SSH_KEY` | empty | empty by default and it should stay so. Only for the one example of step 7, `gits crypt rekey`, which needs two keys at the same time: the key the stored files get in place of `GITS_ENCRYPTION_SSH_KEY`. Given only in that command |
+| `GITS_ENCRYPTION_SSH_KEY` | `examples/encrypt/tmp/key` | the one variable which says which ssh key is used: it encrypts and it opens what is stored (private key file, the public one is `<file>.pub`). Only `start.sh` and `server.ts` use it. The path of the file, nothing is added to it: a full one, or relative to the directory the command is started in (`tmp/key2` in `examples/encrypt`, `../tmp/key2` in `repoa`) |
+| `GITS_ENCRYPTION_REKEY_SSH_KEY` | empty | empty by default and it should stay so. Only for the one example of step 7, `gits crypt rekey`, which needs two keys at the same time: the key the stored files get in place of `GITS_ENCRYPTION_SSH_KEY`. Given only in that command, as the path of the private key file: a full one, or relative to the directory the command is started in (`tmp/key2` in `examples/encrypt`, `../tmp/key` in `repoa`). Nothing is added to it |
 | `GITS_DEMO_LOG` | `examples/encrypt/server.log` | log of the server. Empty (`GITS_DEMO_LOG=""`): no log |
 | `GITS_DEMO_AGENT` | `examples/encrypt/tmp/agent.sock` | socket of the ssh-agent of the demo |
 | `GITS_DEMO_SSENC` | `examples/encrypt/bin/ssenc` | the binary `server.js` starts for every request: `rust/target/release/ssenc` of the encrypt repository. A path, or a name found in `PATH` (`GITS_DEMO_SSENC=ssenc` when you installed it) |
@@ -446,8 +446,9 @@ below the current directory (only a config says what should be encrypted, so the
 
 What the next command does, step by step:
 
-1. **`GITS_ENCRYPTION_SSH_KEY=key2`**: for this one command the key of the demo is `tmp/key2`
-   (`env.sh` turns the name into the file). Nothing else knows about keys: not gits, not the storage.
+1. **`GITS_ENCRYPTION_SSH_KEY=tmp/key2`**: for this one command the key of the demo is the file
+   `tmp/key2` (a path, relative to the directory you are in). Nothing else knows about keys: not
+   gits, not the storage.
 2. **`gits.sh`** defines `GITS_SOURCE`, `GITS_ENCRYPTION_SOCKET`, `GITS_START=start.sh`,
    `GITS_EXIT=stop.sh` and starts the gits binary with `crypt encrypt all --yes`.
 3. **gits runs `start.sh`** (`GITS_START`, once, before anything else): an ssh-agent with `key2`
@@ -473,7 +474,7 @@ What is encrypted is what was **stored** (the plain files in the storage). The l
 gits only lists the files it would encrypt.
 
 ```sh
-GITS_ENCRYPTION_SSH_KEY=key2 /bin/bash gits.sh crypt encrypt all --yes
+GITS_ENCRYPTION_SSH_KEY=tmp/key2 /bin/bash gits.sh crypt encrypt all --yes
 # we will never want to decrypt all in GITS_SOURCE
 # WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
 # WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
@@ -488,11 +489,11 @@ GITS_ENCRYPTION_SSH_KEY=key2 /bin/bash gits.sh crypt encrypt all --yes
 ssh-keygen -lf tmp/key2.pub
 
 (cd repoa && /bin/bash ../gits.sh diff)                          # AUTH: the first key doesn't open it
-(cd repoa && GITS_ENCRYPTION_SSH_KEY=key2 /bin/bash ../gits.sh diff)   # files are in sync
+(cd repoa && GITS_ENCRYPTION_SSH_KEY=../tmp/key2 /bin/bash ../gits.sh diff)   # files are in sync
 ```
 
 From now on the key of this storage is `key2`: either write it into `env.sh`
-(`GITS_ENCRYPTION_SSH_KEY` default) or keep giving `GITS_ENCRYPTION_SSH_KEY=key2`.
+(`GITS_ENCRYPTION_SSH_KEY` default) or keep giving `GITS_ENCRYPTION_SSH_KEY=tmp/key2` (in `repoa`: `../tmp/key2`).
 
 ## 7. Rekey: another key without decrypting to the storage
 
@@ -512,8 +513,8 @@ server answers the requests `rekey` / `rewrap` only then:
 
 ```sh
 /bin/bash gits.sh crypt rekey --storage --yes                              # USAGE: the server was started without GITS_ENCRYPTION_REKEY_SSH_KEY
-GITS_ENCRYPTION_REKEY_SSH_KEY=key2 /bin/bash gits.sh crypt rekey --storage         # the list
-GITS_ENCRYPTION_REKEY_SSH_KEY=key2 /bin/bash gits.sh crypt rekey --storage --yes   # one commit, one push
+GITS_ENCRYPTION_REKEY_SSH_KEY=tmp/key2 /bin/bash gits.sh crypt rekey --storage         # the list
+GITS_ENCRYPTION_REKEY_SSH_KEY=tmp/key2 /bin/bash gits.sh crypt rekey --storage --yes   # one commit, one push
   # this one is decoding and encoding in one go - produces just one commit - much safer if we don't want to even for the moment decode in the remote
   # this one is decoding and encoding in one go - produces just one commit - much safer if we don't want to even for the moment decode in the remote
   # this one is decoding and encoding in one go - produces just one commit - much safer if we don't want to even for the moment decode in the remote
@@ -529,7 +530,7 @@ GITS_ENCRYPTION_REKEY_SSH_KEY=key2 /bin/bash gits.sh crypt rekey --storage --yes
   # default key is no longer good because we have rekeyed all files in the repo
   # default key is no longer good because we have rekeyed all files in the repo
 
-(cd repoa && GITS_ENCRYPTION_SSH_KEY=key2 /bin/bash ../gits.sh diff)   # files are in sync
+(cd repoa && GITS_ENCRYPTION_SSH_KEY=../tmp/key2 /bin/bash ../gits.sh diff)   # files are in sync
 ```
 
 `--rewrap-only` replaces only the key line at the top of each file, the content stays byte for
@@ -539,7 +540,7 @@ Here back to `key`, only for `repoa`:
 ```sh
 cd repoa
 git -C ../gits_source log --oneline | head -n 1
-GITS_ENCRYPTION_SSH_KEY=key2 GITS_ENCRYPTION_REKEY_SSH_KEY=key /bin/bash ../gits.sh crypt rekey --rewrap-only --yes
+GITS_ENCRYPTION_SSH_KEY=../tmp/key2 GITS_ENCRYPTION_REKEY_SSH_KEY=../tmp/key /bin/bash ../gits.sh crypt rekey --rewrap-only --yes
 git -C ../gits_source show --stat HEAD            # one file, one line changed
 /bin/bash ../gits.sh diff                         # key opens repoa again
 cd ..
