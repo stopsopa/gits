@@ -33,7 +33,7 @@ Everything is in `examples/encrypt/`:
 | [keys.sh](keys.sh) | creates two ssh keys: `key` (in use) and `key2` (to change to) |
 | [start.sh](start.sh) | starts the agent and the server, tests the encryption |
 | [stop.sh](stop.sh) | stops them |
-| [server.ts](server.ts) | the server behind the socket, about 100 lines |
+| [server.ts](server.ts) | the server behind the socket: request, work, reply, socket, test, in that order |
 | [ENCRYPT_IN_GITS_PLAN.md](ENCRYPT_IN_GITS_PLAN.md) | the design of what steps 6 and 7 show: gits without the socket, `gits crypt` |
 | [gits.sh](gits.sh) | the wrapper you call in place of `gits` |
 | [reset_setup.sh](reset_setup.sh) | brings the demo to its state 0: removes and creates again everything below |

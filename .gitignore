@@ -7,7 +7,7 @@
 
 # examples/SUMMARY.md: everything its commands create
 /s/
-
+/node_modules/
 # examples/encrypt/ENCRYPT_PROCESS.md: everything its scripts create
 /examples/encrypt/tmp/
 /examples/encrypt/server.log
