@@ -6,7 +6,7 @@
 #
 #   source "${_DIR}/env.sh"
 #
-# A variable which is already defined in the terminal wins: GITS_ENCRYPTION_SSH_KEY=... /bin/bash gits.sh diff
+# A variable which is already defined in the terminal wins: GITS_ENCRYPTION_SSH_PUBLIC_KEY... /bin/bash gits.sh diff
 #
 
 # Where everything generated goes: gits_source/, repoa/, repob/, tmp/, server.log.
@@ -33,8 +33,8 @@ export GITS_ENCRYPTION_SOCKET="${GITS_ENCRYPTION_SOCKET-${GITS_MAIN_ENCRYPT_DIRE
 # The value is the path of the file exactly as it is used, nothing is added to it: a full path,
 # or one relative to the directory the command is started in. To use the other key for one
 # command, override only this variable:
-#   GITS_ENCRYPTION_SSH_KEY=tmp/key2 /bin/bash gits.sh crypt encrypt all --yes
-export GITS_ENCRYPTION_SSH_KEY="${GITS_ENCRYPTION_SSH_KEY:-${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/key}"
+#   GITS_ENCRYPTION_SSH_PUBLIC_KEYtmp/key2 /bin/bash gits.sh crypt encrypt all --yes
+export GITS_ENCRYPTION_SSH_PUBLIC_KEY"${GITS_ENCRYPTION_SSH_KEY:-${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/key}"
 
 # Empty by default, and it should stay empty. It exists only for one example of
 # ENCRYPT_PROCESS.md, step 7 "gits crypt rekey": the only operation which needs two keys at the

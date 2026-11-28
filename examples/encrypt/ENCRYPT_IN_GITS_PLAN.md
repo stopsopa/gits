@@ -197,10 +197,10 @@ cat "gits_source/git@github.com:demo__repoa.git/.env"     # plain text again
 (cd repoa && GITS_ENCRYPTION_SOCKET= /bin/bash ../gits.sh diff)    # works without the socket again
 
 # encrypt again, with the other key
-GITS_ENCRYPTION_SSH_KEY=tmp/key2 /bin/bash gits.sh crypt encrypt all --yes
+GITS_ENCRYPTION_SSH_PUBLIC_KEYtmp/key2 /bin/bash gits.sh crypt encrypt all --yes
 /bin/bash gits.sh crypt status --storage                  # the fingerprint of key2
 (cd repoa && /bin/bash ../gits.sh diff)                   # AUTH: key doesn't open it
-(cd repoa && GITS_ENCRYPTION_SSH_KEY=../tmp/key2 /bin/bash ../gits.sh diff)   # in sync
+(cd repoa && GITS_ENCRYPTION_SSH_PUBLIC_KEY../tmp/key2 /bin/bash ../gits.sh diff)   # in sync
 ```
 
 ### B. from scratch: encrypted, then rekey
@@ -216,10 +216,10 @@ GITS_ENCRYPTION_REKEY_SSH_KEY=tmp/key2 /bin/bash gits.sh crypt rekey --storage -
 /bin/bash gits.sh crypt status --storage                  # the fingerprint of key2
 
 (cd repoa && /bin/bash ../gits.sh diff)                   # AUTH: key is out
-(cd repoa && GITS_ENCRYPTION_SSH_KEY=../tmp/key2 /bin/bash ../gits.sh diff)   # in sync
+(cd repoa && GITS_ENCRYPTION_SSH_PUBLIC_KEY../tmp/key2 /bin/bash ../gits.sh diff)   # in sync
 
 # only the key line, back to key, only repoa
-(cd repoa && GITS_ENCRYPTION_SSH_KEY=../tmp/key2 GITS_ENCRYPTION_REKEY_SSH_KEY=../tmp/key /bin/bash ../gits.sh crypt rekey --rewrap-only --yes)
+(cd repoa && GITS_ENCRYPTION_SSH_PUBLIC_KEY../tmp/key2 GITS_ENCRYPTION_REKEY_SSH_KEY=../tmp/key /bin/bash ../gits.sh crypt rekey --rewrap-only --yes)
 git -C gits_source show --stat HEAD                       # one file, one line
 /bin/bash gits.sh crypt status --storage                  # repoa: key, repob: key2
 ```

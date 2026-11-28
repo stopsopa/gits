@@ -156,7 +156,7 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "no SSH_AUTH_SOCK: explained"
 
-COMMAND='cd "${DEMO}/repoa" && GITS_ENCRYPTION_SSH_KEY="SHA256:nosuchkey" w diff 2>&1 | has "key SHA256:nosuchkey is not loaded in ssh-agent"'
+COMMAND='cd "${DEMO}/repoa" && GITS_ENCRYPTION_SSH_PUBLIC_KEY"SHA256:nosuchkey" w diff 2>&1 | has "key SHA256:nosuchkey is not loaded in ssh-agent"'
 EXPECTED_STDOUT="key SHA256:nosuchkey is not loaded in ssh-agent"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
@@ -355,7 +355,7 @@ test "after it gits works without the socket"
 # ---------- 6. encrypt everything with another key ----------
 
 # the second key, the way the guide gives it
-export GITS_ENCRYPTION_SSH_KEY="$(ssh-keygen -lf "${DEMO}/keys/key2.pub" | cut -d " " -f 2)"
+export GITS_ENCRYPTION_SSH_PUBLIC_KEY"$(ssh-keygen -lf "${DEMO}/keys/key2.pub" | cut -d " " -f 2)"
 
 COMMAND='cd "${DEMO}" && w crypt encrypt all --yes 2>&1 | has "4 files changed in the storage"; forms; with "$(fp key2)"; with "$(fp key)"'
 EXPECTED_STDOUT="4 files changed in the storage
@@ -471,7 +471,7 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "after rekey: the first key doesn't open"
 
-export GITS_ENCRYPTION_SSH_KEY="$(fp key2)"
+export GITS_ENCRYPTION_SSH_PUBLIC_KEY"$(fp key2)"
 
 # the content survived the rekey: pull brings back a removed local file, also the binary one
 COMMAND='w isinsync; echo "repoa ${?}"; cd "${DEMO}/repob" && cp secrets/cert.bin "${WORK}/cert.before" && rm secrets/cert.bin .env.local && w pull --yes 2>&1 | has "files pulled"; cmp secrets/cert.bin "${WORK}/cert.before" && cat .env.local'
@@ -542,7 +542,7 @@ test "GITS_PULL_TO_SYNC of the terminal is ignored"
 
 # not used by the guide, but ssenc takes it too: a public key file, relative to the directory of the command.
 # start.sh checks it, and its test encrypts and decrypts with it through the server and ssenc
-COMMAND='cd "${DEMO}" && GITS_ENCRYPTION_SSH_KEY=keys/key2.pub w crypt status all 2>&1 | has "encrypted: 4"; cd repoa && GITS_ENCRYPTION_SSH_KEY=../keys/key.pub w isinsync; echo "repoa ${?}"'
+COMMAND='cd "${DEMO}" && GITS_ENCRYPTION_SSH_PUBLIC_KEYkeys/key2.pub w crypt status all 2>&1 | has "encrypted: 4"; cd repoa && GITS_ENCRYPTION_SSH_PUBLIC_KEY../keys/key.pub w isinsync; echo "repoa ${?}"'
 EXPECTED_STDOUT="encrypted: 4
 repoa 0"
 EXPECTED_STDERR=""

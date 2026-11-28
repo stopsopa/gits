@@ -292,7 +292,7 @@ test "after it gits works without the socket"
 
 # ---------- 6. encrypt everything with another key ----------
 
-export GITS_ENCRYPTION_SSH_KEY="${DEMO}/tmp/key2"
+export GITS_ENCRYPTION_SSH_PUBLIC_KEY"${DEMO}/tmp/key2"
 
 COMMAND='cd "${DEMO}" && w crypt encrypt all --yes 2>&1 | has "4 files changed in the storage"; forms; with "$(fp key2)"; with "$(fp key)"'
 EXPECTED_STDOUT="4 files changed in the storage
@@ -385,7 +385,7 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "after rekey: the first key doesn't open"
 
-export GITS_ENCRYPTION_SSH_KEY="${DEMO}/tmp/key2"
+export GITS_ENCRYPTION_SSH_PUBLIC_KEY"${DEMO}/tmp/key2"
 
 # the content survived the rekey: pull brings back a removed local file, also the binary one
 COMMAND='w isinsync; echo "repoa ${?}"; cd "${DEMO}/repob" && cp secrets/cert.bin "${WORK}/cert.before" && rm secrets/cert.bin .env.local && w pull --yes 2>&1 | has "files pulled"; cmp secrets/cert.bin "${WORK}/cert.before" && cat .env.local'

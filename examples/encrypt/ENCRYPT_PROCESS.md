@@ -446,7 +446,7 @@ below the current directory (only a config says what should be encrypted, so the
 
 What the next command does, step by step:
 
-1. **`GITS_ENCRYPTION_SSH_KEY=tmp/key2`**: for this one command the key of the demo is the file
+1. **`GITS_ENCRYPTION_SSH_PUBLIC_KEYtmp/key2`**: for this one command the key of the demo is the file
    `tmp/key2` (a path, relative to the directory you are in). Nothing else knows about keys: not
    gits, not the storage.
 2. **`gits.sh`** defines `GITS_SOURCE`, `GITS_ENCRYPTION_SOCKET`, `GITS_START=start.sh`,
@@ -474,7 +474,7 @@ What is encrypted is what was **stored** (the plain files in the storage). The l
 gits only lists the files it would encrypt.
 
 ```sh
-GITS_ENCRYPTION_SSH_KEY=tmp/key2 /bin/bash gits.sh crypt encrypt all --yes
+GITS_ENCRYPTION_SSH_PUBLIC_KEYtmp/key2 /bin/bash gits.sh crypt encrypt all --yes
 # we will never want to decrypt all in GITS_SOURCE
 # WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
 # WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
@@ -489,11 +489,11 @@ GITS_ENCRYPTION_SSH_KEY=tmp/key2 /bin/bash gits.sh crypt encrypt all --yes
 ssh-keygen -lf tmp/key2.pub
 
 (cd repoa && /bin/bash ../gits.sh diff)                          # AUTH: the first key doesn't open it
-(cd repoa && GITS_ENCRYPTION_SSH_KEY=../tmp/key2 /bin/bash ../gits.sh diff)   # files are in sync
+(cd repoa && GITS_ENCRYPTION_SSH_PUBLIC_KEY../tmp/key2 /bin/bash ../gits.sh diff)   # files are in sync
 ```
 
 From now on the key of this storage is `key2`: either write it into `env.sh`
-(`GITS_ENCRYPTION_SSH_KEY` default) or keep giving `GITS_ENCRYPTION_SSH_KEY=tmp/key2` (in `repoa`: `../tmp/key2`).
+(`GITS_ENCRYPTION_SSH_KEY` default) or keep giving `GITS_ENCRYPTION_SSH_PUBLIC_KEYtmp/key2` (in `repoa`: `../tmp/key2`).
 
 ## 7. Rekey: another key without decrypting to the storage
 
@@ -530,7 +530,7 @@ GITS_ENCRYPTION_REKEY_SSH_KEY=tmp/key2 /bin/bash gits.sh crypt rekey --storage -
   # default key is no longer good because we have rekeyed all files in the repo
   # default key is no longer good because we have rekeyed all files in the repo
 
-(cd repoa && GITS_ENCRYPTION_SSH_KEY=../tmp/key2 /bin/bash ../gits.sh diff)   # files are in sync
+(cd repoa && GITS_ENCRYPTION_SSH_PUBLIC_KEY../tmp/key2 /bin/bash ../gits.sh diff)   # files are in sync
 ```
 
 `--rewrap-only` replaces only the key line at the top of each file, the content stays byte for
@@ -540,7 +540,7 @@ Here back to `key`, only for `repoa`:
 ```sh
 cd repoa
 git -C ../gits_source log --oneline | head -n 1
-GITS_ENCRYPTION_SSH_KEY=../tmp/key2 GITS_ENCRYPTION_REKEY_SSH_KEY=../tmp/key /bin/bash ../gits.sh crypt rekey --rewrap-only --yes
+GITS_ENCRYPTION_SSH_PUBLIC_KEY../tmp/key2 GITS_ENCRYPTION_REKEY_SSH_KEY=../tmp/key /bin/bash ../gits.sh crypt rekey --rewrap-only --yes
 git -C ../gits_source show --stat HEAD            # one file, one line changed
 /bin/bash ../gits.sh diff                         # key opens repoa again
 cd ..
@@ -576,7 +576,7 @@ Try the ways out:
 cd repoa                          # from examples/encrypt
 
 # a start which fails (no such key): gits stops before doing anything, and stop.sh still ran
-GITS_ENCRYPTION_SSH_KEY=/no/such/key /bin/bash ../gits.sh diff; echo "exit code $?"
+GITS_ENCRYPTION_SSH_PUBLIC_KEY/no/such/key /bin/bash ../gits.sh diff; echo "exit code $?"
 ls ../tmp                         # key key.pub key2 key2.pub
 
 # Ctrl+C in the middle: make the config slow, start, press Ctrl+C while it sleeps

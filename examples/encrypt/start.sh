@@ -37,7 +37,7 @@ source "${_DIR}/env.sh"
 /bin/bash "${_DIR}/stop.sh"
 
 if [[ ! -f "${GITS_ENCRYPTION_SSH_KEY}" ]]; then
-  echo "${0} error: no key GITS_ENCRYPTION_SSH_KEY=>${GITS_ENCRYPTION_SSH_KEY}<, create it: /bin/bash ${_DIR}/keys.sh"
+  echo "${0} error: no key GITS_ENCRYPTION_SSH_PUBLIC_KEY>${GITS_ENCRYPTION_SSH_KEY}<, create it: /bin/bash ${_DIR}/keys.sh"
   exit 1
 fi
 
@@ -58,7 +58,7 @@ fi
 echo "${SSH_AGENT_PID}" > "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/agent.pid"
 
 ssh-add -q "${GITS_ENCRYPTION_SSH_KEY}" || {
-  echo "${0} error: ssh-add failed for GITS_ENCRYPTION_SSH_KEY=>${GITS_ENCRYPTION_SSH_KEY}<"
+  echo "${0} error: ssh-add failed for GITS_ENCRYPTION_SSH_PUBLIC_KEY>${GITS_ENCRYPTION_SSH_KEY}<"
   exit 1
 }
 

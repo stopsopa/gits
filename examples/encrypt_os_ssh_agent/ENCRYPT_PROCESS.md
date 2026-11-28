@@ -174,7 +174,7 @@ is never contacted: gits only takes the name of the directory in the storage fro
 A variable defined in the terminal wins over the default (besides `GITS_SOURCE` and `GITS_PULL_TO_SYNC`): `GITS_DEMO_LOG="" /bin/bash examples/encrypt_os_ssh_agent/gits.sh diff`.
 
 That includes `GITS_ENCRYPTION_SSH_KEY`: when it is exported in your terminal (e.g. you tried
-`export GITS_ENCRYPTION_SSH_KEY=...` with a key of your own), every command of this guide asks
+`export GITS_ENCRYPTION_SSH_PUBLIC_KEY...` with a key of your own), every command of this guide asks
 for **that** key, not for `keys/key`, and fails with `key SHA256:... is not loaded in ssh-agent`
 although the keys of the demo are loaded. Check and undo:
 
@@ -236,7 +236,7 @@ ssh-keygen -lf examples/encrypt_os_ssh_agent/keys/key.pub | cut -d " " -f 2    #
 `env.sh` runs exactly that for its default, and every command below which needs the other key
 gives `"$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)"`: the demo generates its keys, so it
 can't have their fingerprints written down. With a key of your own you write the fingerprint
-itself (`GITS_ENCRYPTION_SSH_KEY="SHA256:..."`), and the `.pub` file is not needed either.
+itself (`GITS_ENCRYPTION_SSH_PUBLIC_KEY"SHA256:..."`), and the `.pub` file is not needed either.
 
 The encryption works now. A command which changes nothing, to see it (the push itself is step 5):
 
@@ -570,7 +570,7 @@ below the current directory (only a config says what should be encrypted, so the
 
 What the next command does, step by step:
 
-1. **`GITS_ENCRYPTION_SSH_KEY="$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)"`**: for this
+1. **`GITS_ENCRYPTION_SSH_PUBLIC_KEY"$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)"`**: for this
    one command the key is `key2`, named by its fingerprint (`ssh-keygen -lf` reads it from the
    public key file, `cut` takes the second word: `SHA256:...`). The key is already loaded in
    your agent (step 3). Nothing else knows about keys: not gits, not the storage.
@@ -599,7 +599,7 @@ What is encrypted is what was **stored** (the plain files in the storage). The l
 gits only lists the files it would encrypt.
 
 ```sh
-GITS_ENCRYPTION_SSH_KEY="$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)" /bin/bash gits.sh crypt encrypt all --yes
+GITS_ENCRYPTION_SSH_PUBLIC_KEY"$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)" /bin/bash gits.sh crypt encrypt all --yes
 # we will never want to decrypt all in GITS_SOURCE
 # WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
 # WARNING: ACTUALLY NO, THIS IS USEFUL, YOU CAN DECODE THEN ENCODE AND RESET HARD 2 COMMITS COMMIT ALL AND ONLY THEN PUSH
@@ -614,7 +614,7 @@ GITS_ENCRYPTION_SSH_KEY="$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)" /bin
 ssh-keygen -lf keys/key2.pub
 
 (cd repoa && /bin/bash ../gits.sh diff)                          # AUTH: the first key doesn't open it
-(cd repoa && GITS_ENCRYPTION_SSH_KEY="$(ssh-keygen -lf ../keys/key2.pub | cut -d " " -f 2)" /bin/bash ../gits.sh diff)   # files are in sync
+(cd repoa && GITS_ENCRYPTION_SSH_PUBLIC_KEY"$(ssh-keygen -lf ../keys/key2.pub | cut -d " " -f 2)" /bin/bash ../gits.sh diff)   # files are in sync
 ```
 
 From now on the key of this storage is `key2`: either change the default of
@@ -625,7 +625,7 @@ text from every directory:
 ```sh
 KEY2="$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)"      # SHA256:..., also shown by: ssh-add -l
 echo "${KEY2}"
-(cd repoa && GITS_ENCRYPTION_SSH_KEY="${KEY2}" /bin/bash ../gits.sh diff)     # files are in sync
+(cd repoa && GITS_ENCRYPTION_SSH_PUBLIC_KEY"${KEY2}" /bin/bash ../gits.sh diff)     # files are in sync
 ```
 
 ## 7. Rekey: another key without decrypting to the storage
@@ -665,7 +665,7 @@ GITS_ENCRYPTION_REKEY_SSH_KEY="$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)
   # default key is no longer good because we have rekeyed all files in the repo
   # default key is no longer good because we have rekeyed all files in the repo
 
-(cd repoa && GITS_ENCRYPTION_SSH_KEY="$(ssh-keygen -lf ../keys/key2.pub | cut -d " " -f 2)" /bin/bash ../gits.sh diff)   # files are in sync
+(cd repoa && GITS_ENCRYPTION_SSH_PUBLIC_KEY"$(ssh-keygen -lf ../keys/key2.pub | cut -d " " -f 2)" /bin/bash ../gits.sh diff)   # files are in sync
 ```
 
 `--rewrap-only` replaces only the key line at the top of each file, the content stays byte for
@@ -675,7 +675,7 @@ Here back to `key`, only for `repoa`:
 ```sh
 cd repoa
 git -C ../gits_source log --oneline | head -n 1
-GITS_ENCRYPTION_SSH_KEY="$(ssh-keygen -lf ../keys/key2.pub | cut -d " " -f 2)" GITS_ENCRYPTION_REKEY_SSH_KEY="$(ssh-keygen -lf ../keys/key.pub | cut -d " " -f 2)" /bin/bash ../gits.sh crypt rekey --rewrap-only --yes
+GITS_ENCRYPTION_SSH_PUBLIC_KEY"$(ssh-keygen -lf ../keys/key2.pub | cut -d " " -f 2)" GITS_ENCRYPTION_REKEY_SSH_KEY="$(ssh-keygen -lf ../keys/key.pub | cut -d " " -f 2)" /bin/bash ../gits.sh crypt rekey --rewrap-only --yes
 git -C ../gits_source show --stat HEAD            # one file, one line changed
 /bin/bash ../gits.sh diff                         # key opens repoa again
 cd ..
@@ -725,7 +725,7 @@ Try the ways out:
 cd repoa                          # from examples/encrypt_os_ssh_agent
 
 # a start which fails (a fingerprint of no key): gits stops before doing anything, and stop.sh still ran
-GITS_ENCRYPTION_SSH_KEY="SHA256:nosuchkey" /bin/bash ../gits.sh diff; echo "exit code $?"
+GITS_ENCRYPTION_SSH_PUBLIC_KEY"SHA256:nosuchkey" /bin/bash ../gits.sh diff; echo "exit code $?"
 ls ../tmp                         # empty
 
 # a key which is not in the agent (like in step 3): the same

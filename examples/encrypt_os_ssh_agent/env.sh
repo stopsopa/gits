@@ -6,7 +6,7 @@
 #
 #   source "${_DIR}/env.sh"
 #
-# A variable which is already defined in the terminal wins: GITS_ENCRYPTION_SSH_KEY=... /bin/bash gits.sh diff
+# A variable which is already defined in the terminal wins: GITS_ENCRYPTION_SSH_PUBLIC_KEY... /bin/bash gits.sh diff
 #
 # There is no variable for an ssh-agent here: this demo starts none. The agent is the one of
 # your terminal, SSH_AUTH_SOCK, and the keys have to be loaded into it by you (ssh-add).
@@ -56,8 +56,8 @@ export GITS_ENCRYPTION_SOCKET="${GITS_ENCRYPTION_SOCKET-${GITS_MAIN_ENCRYPT_DIRE
 # public key file (the demo can't know the fingerprint of a key it generates in advance; with
 # your own key write the fingerprint itself here). No such file yet: empty, and the server says so.
 # The other key of the demo, for one command:
-#   GITS_ENCRYPTION_SSH_KEY="$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)" /bin/bash gits.sh crypt encrypt all --yes
-export GITS_ENCRYPTION_SSH_KEY="${GITS_ENCRYPTION_SSH_KEY:-$(ssh-keygen -lf "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/keys/key.pub" 2> /dev/null | cut -d " " -f 2)}"
+#   GITS_ENCRYPTION_SSH_PUBLIC_KEY"$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)" /bin/bash gits.sh crypt encrypt all --yes
+export GITS_ENCRYPTION_SSH_PUBLIC_KEY"${GITS_ENCRYPTION_SSH_KEY:-$(ssh-keygen -lf "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/keys/key.pub" 2> /dev/null | cut -d " " -f 2)}"
 
 # Empty by default, and it should stay empty. It exists only for one example of
 # ENCRYPT_PROCESS.md, step 7 "gits crypt rekey": the only operation which needs two keys at the

@@ -181,7 +181,7 @@ With your own key in place of the demo keys:
 
 ```sh
 ssh-add ~/.ssh/gits_encryption                                  # once per session, passphrase asked here
-export GITS_ENCRYPTION_SSH_KEY="$(ssh-keygen -lf ~/.ssh/gits_encryption.pub | cut -d " " -f 2)"     # its fingerprint: SHA256:...
+export GITS_ENCRYPTION_SSH_PUBLIC_KEY"$(ssh-keygen -lf ~/.ssh/gits_encryption.pub | cut -d " " -f 2)"     # its fingerprint: SHA256:...
 /bin/bash examples/encrypt_os_ssh_agent/gits.sh push --yes
 ```
 
@@ -247,7 +247,7 @@ the new one signs to lock it again. In the demo these are the two variables, and
 
 ```sh
 # --ssh-key: the key which opens what is stored
-export GITS_ENCRYPTION_SSH_KEY="$(ssh-keygen -lf ~/.ssh/gits_encryption.pub | cut -d " " -f 2)"
+export GITS_ENCRYPTION_SSH_PUBLIC_KEY"$(ssh-keygen -lf ~/.ssh/gits_encryption.pub | cut -d " " -f 2)"
 
 # --new-ssh-key: the target
 GITS_ENCRYPTION_REKEY_SSH_KEY="$(ssh-keygen -lf ~/.ssh/gits_encryption_new.pub | cut -d " " -f 2)" /bin/bash gits.sh crypt rekey --storage --yes
