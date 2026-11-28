@@ -167,7 +167,7 @@ is never contacted: gits only takes the name of the directory in the storage fro
 | `SSH_AUTH_SOCK` | the one of your terminal | **not defined by the demo.** The ssh-agent: `start.sh` asks it which keys it has, `ssenc` asks it to sign. Whatever your terminal has is used |
 | `GITS_DEMO_LOG` | `examples/encrypt_os_ssh_agent/server.log` | log of the server. Empty (`GITS_DEMO_LOG=""`): no log |
 | `GITS_DEMO_SSENC` | `examples/encrypt_os_ssh_agent/bin/ssenc` | the binary `server.js` starts for every request: `rust/target/release/ssenc` of the encrypt repository. A path, or a name found in `PATH` (`GITS_DEMO_SSENC=ssenc` when you installed it) |
-| `GITS_DEMO_ENCRYPT` | `__linked/STOPSOPA__encrypt/STOPSOPA__encrypt`, then `submodules/encrypt` | only `encrypt.sh`: the checkout the binary is copied from |
+| `GITS_LINKED_ENCRYPT_DIR` | `__linked/STOPSOPA__encrypt/STOPSOPA__encrypt`, then `submodules/encrypt` | only `encrypt.sh`: the checkout the binary is copied from |
 | `GITS_DEMO_BIN` | `bin/<arch>/gits` | the gits binary `gits.sh` starts |
 | `GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES` | `examples/encrypt_os_ssh_agent` | where everything generated goes: `gits_source/`, `repoa/`, `repob/`, `keys/`, `tmp/`, `server.log` |
 

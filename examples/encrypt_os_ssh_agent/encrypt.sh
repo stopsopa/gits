@@ -6,7 +6,7 @@
 #
 #        <checkout of encrypt>/rust/target/release/ssenc  ->  examples/encrypt_os_ssh_agent/bin/ssenc
 #
-#      The checkout: GITS_DEMO_ENCRYPT, or the first one which exists of
+#      The checkout: GITS_LINKED_ENCRYPT_DIR, or the first one which exists of
 #      __linked/STOPSOPA__encrypt/STOPSOPA__encrypt and submodules/encrypt. When the binary is
 #      not built there yet, it is built first (rust/compile.sh: cargo build --release).
 #      Skipped when GITS_DEMO_SSENC points somewhere else (a binary you installed yourself).
@@ -21,7 +21,7 @@
 #
 # Env vars (env.sh):
 #   GITS_DEMO_SSENC     the binary the server starts, default examples/encrypt_os_ssh_agent/bin/ssenc
-#   GITS_DEMO_ENCRYPT   checkout of the encrypt repository the binary is copied from
+#   GITS_LINKED_ENCRYPT_DIR   checkout of the encrypt repository the binary is copied from
 #
 
 _SHELL="$(ps -p $$ -o comm=)"; # bash || sh || zsh
@@ -54,27 +54,27 @@ function fail {
 # 1. The binary
 
 if [[ "${GITS_DEMO_SSENC}" == "${COPY}" ]]; then
-  if [[ -z "${GITS_DEMO_ENCRYPT}" ]]; then
+  if [[ -z "${GITS_LINKED_ENCRYPT_DIR}" ]]; then
     for CANDIDATE in "${_ROOT}/__linked/STOPSOPA__encrypt/STOPSOPA__encrypt" "${_ROOT}/submodules/encrypt"; do
       if [[ -f "${CANDIDATE}/rust/Cargo.toml" ]]; then
-        GITS_DEMO_ENCRYPT="${CANDIDATE}"
+        GITS_LINKED_ENCRYPT_DIR="${CANDIDATE}"
         break
       fi
     done
   fi
 
-  if [[ ! -f "${GITS_DEMO_ENCRYPT}/rust/Cargo.toml" ]]; then
-    fail "no checkout of https://github.com/stopsopa/encrypt: GITS_DEMO_ENCRYPT=>${GITS_DEMO_ENCRYPT}<, and neither __linked/STOPSOPA__encrypt/STOPSOPA__encrypt nor submodules/encrypt (git submodule update --init) has it"
+  if [[ ! -f "${GITS_LINKED_ENCRYPT_DIR}/rust/Cargo.toml" ]]; then
+    fail "no checkout of https://github.com/stopsopa/encrypt: GITS_LINKED_ENCRYPT_DIR=>${GITS_LINKED_ENCRYPT_DIR}<, and neither __linked/STOPSOPA__encrypt/STOPSOPA__encrypt nor submodules/encrypt (git submodule update --init) has it"
   fi
 
-  if [[ ! -x "${GITS_DEMO_ENCRYPT}/${BUILT}" ]]; then
-    echo "${0}: building ${GITS_DEMO_ENCRYPT}/${BUILT}"
-    /bin/bash "${GITS_DEMO_ENCRYPT}/rust/compile.sh" || fail "can't build ssenc: /bin/bash ${GITS_DEMO_ENCRYPT}/rust/compile.sh"
+  if [[ ! -x "${GITS_LINKED_ENCRYPT_DIR}/${BUILT}" ]]; then
+    echo "${0}: building ${GITS_LINKED_ENCRYPT_DIR}/${BUILT}"
+    /bin/bash "${GITS_LINKED_ENCRYPT_DIR}/rust/compile.sh" || fail "can't build ssenc: /bin/bash ${GITS_LINKED_ENCRYPT_DIR}/rust/compile.sh"
   fi
 
   mkdir -p "${_DIR}/bin" || fail "can't create directory >${_DIR}/bin<"
   # to a new file first: a server which runs right now keeps the old one
-  cp "${GITS_DEMO_ENCRYPT}/${BUILT}" "${COPY}.new" && mv "${COPY}.new" "${COPY}" || fail "can't copy >${GITS_DEMO_ENCRYPT}/${BUILT}< to >${COPY}<"
+  cp "${GITS_LINKED_ENCRYPT_DIR}/${BUILT}" "${COPY}.new" && mv "${COPY}.new" "${COPY}" || fail "can't copy >${GITS_LINKED_ENCRYPT_DIR}/${BUILT}< to >${COPY}<"
 fi
 
 "${GITS_DEMO_SSENC}" --version > /dev/null 2>&1 || fail "the binary doesn't run: GITS_DEMO_SSENC=>${GITS_DEMO_SSENC}<"

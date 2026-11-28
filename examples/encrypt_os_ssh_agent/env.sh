@@ -81,7 +81,7 @@ GITS_DEMO_LOG="${GITS_DEMO_LOG-${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/se
 # One file, no other file of that repository is needed next to it.
 #
 # For the demo encrypt.sh copies it to examples/encrypt_os_ssh_agent/bin/ssenc, from
-# __linked/STOPSOPA__encrypt/STOPSOPA__encrypt or from submodules/encrypt (GITS_DEMO_ENCRYPT).
+# __linked/STOPSOPA__encrypt/STOPSOPA__encrypt or from submodules/encrypt (GITS_LINKED_ENCRYPT_DIR).
 # For real: install that file wherever you want and point this variable to it,
 # a path (GITS_DEMO_SSENC=/usr/local/bin/ssenc) or a name found in PATH (GITS_DEMO_SSENC=ssenc).
 # encrypt.sh copies nothing then.
@@ -89,7 +89,7 @@ export GITS_DEMO_SSENC="${GITS_DEMO_SSENC:-${_DIR}/bin/ssenc}"
 
 # Only for encrypt.sh: the checkout of the encrypt repository the binary above is copied from.
 # Not defined: __linked/STOPSOPA__encrypt/STOPSOPA__encrypt, then submodules/encrypt.
-GITS_DEMO_ENCRYPT="${GITS_DEMO_ENCRYPT:-}"
+GITS_LINKED_ENCRYPT_DIR="${GITS_LINKED_ENCRYPT_DIR:-}"
 
 # The gits binary which gits.sh starts: the one compiled here (/bin/bash compile.sh).
 GITS_DEMO_BIN="${GITS_DEMO_BIN:-$(ls "${_DIR}"/../../bin/*/gits 2> /dev/null | head -n 1)}"
