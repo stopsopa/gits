@@ -185,6 +185,10 @@ export GITS_ENCRYPTION_SSH_KEY="$(ssh-keygen -lf ~/.ssh/gits_encryption.pub | cu
 /bin/bash examples/encrypt_os_ssh_agent/gits.sh push --yes
 ```
 
+(`export` keeps the variable for the whole terminal: every later command of the demo asks for
+this key, also the ones of [ENCRYPT_PROCESS.md](ENCRYPT_PROCESS.md) which expect the key of the
+demo. Back to the demo: `unset GITS_ENCRYPTION_SSH_KEY`.)
+
 and for a rotation, both keys loaded:
 
 ```sh

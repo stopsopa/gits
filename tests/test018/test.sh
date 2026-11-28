@@ -142,7 +142,7 @@ test "reset_setup.sh: storage, two projects, two keys which nobody loaded, nothi
 
 # a command which encrypts, with the key not loaded: the test of start.sh fails with what ssenc
 # said, and gits stops before anything is done
-COMMAND='cd "${DEMO}/repoa" && w push --yes 2>&1 | has "error ENV key $(fp key) is not loaded in ssh-agent (check: ssh-add -l)" "GITS_START" "files pushed"; commits; listing "${DEMO}/tmp"'
+COMMAND='cd "${DEMO}/repoa" && w push --yes 2>&1 | has "error ENV key $(fp key) is not loaded in ssh-agent (check: ssh-add -l)" "is not the key of the demo" "GITS_START" "files pushed"; commits; listing "${DEMO}/tmp"'
 EXPECTED_STDOUT="error ENV key $(fp key) is not loaded in ssh-agent (check: ssh-add -l)
 GITS_START
 0"
@@ -156,8 +156,11 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "no SSH_AUTH_SOCK: explained"
 
-COMMAND='cd "${DEMO}/repoa" && GITS_ENCRYPTION_SSH_KEY="SHA256:nosuchkey" w diff 2>&1 | has "key SHA256:nosuchkey is not loaded in ssh-agent"'
-EXPECTED_STDOUT="key SHA256:nosuchkey is not loaded in ssh-agent"
+COMMAND='cd "${DEMO}/repoa" && GITS_ENCRYPTION_SSH_KEY="SHA256:nosuchkey" w diff 2>&1 | has "key SHA256:nosuchkey is not loaded in ssh-agent" "the key which was asked for is not the key of the demo" "GITS_ENCRYPTION_SSH_KEY=>SHA256:nosuchkey<" "unset GITS_ENCRYPTION_SSH_KEY"'
+EXPECTED_STDOUT="key SHA256:nosuchkey is not loaded in ssh-agent
+the key which was asked for is not the key of the demo
+GITS_ENCRYPTION_SSH_KEY=>SHA256:nosuchkey<
+unset GITS_ENCRYPTION_SSH_KEY"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "a fingerprint of no key: explained"

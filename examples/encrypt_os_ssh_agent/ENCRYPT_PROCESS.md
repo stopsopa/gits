@@ -170,6 +170,16 @@ is never contacted: gits only takes the name of the directory in the storage fro
 
 A variable defined in the terminal wins over the default (besides `GITS_SOURCE`): `GITS_DEMO_LOG="" /bin/bash examples/encrypt_os_ssh_agent/gits.sh diff`.
 
+That includes `GITS_ENCRYPTION_SSH_KEY`: when it is exported in your terminal (e.g. you tried
+`export GITS_ENCRYPTION_SSH_KEY=...` with a key of your own), every command of this guide asks
+for **that** key, not for `keys/key`, and fails with `key SHA256:... is not loaded in ssh-agent`
+although the keys of the demo are loaded. `start.sh` says so when it happens. Check and undo:
+
+```sh
+echo "${GITS_ENCRYPTION_SSH_KEY}"         # empty: the default of env.sh is used, the key of the demo
+unset GITS_ENCRYPTION_SSH_KEY
+```
+
 ## 3. The keys: ssh-add
 
 Step 1 created the files, and nothing loaded them anywhere:
