@@ -472,6 +472,25 @@ cd ../repob
 cd ..
 
 /bin/bash gits.sh crypt status all        # encrypted: 4, each with [SHA256:...]: the fingerprint of the key
+  # this one is pretty important
+  # this one is pretty important
+  # this one is pretty important
+  # this one is pretty important
+  # this one is pretty important
+  # this one is pretty important
+  # this one is pretty important
+  # this one is pretty important
+  # prints
+         # ':e:' files of all projects below the current directory, as they are stored:
+
+         # encrypted  git@github.com:demo__repoa.git/.env  [SHA256:vAjPIK2hnuc7hdbXVMstyfoEMXBzSnCC+hTjV+/Y6uQ]
+         # encrypted  git@github.com:demo__repob.git/.env.local  [SHA256:vAjPIK2hnuc7hdbXVMstyfoEMXBzSnCC+hTjV+/Y6uQ]
+         # encrypted  git@github.com:demo__repob.git/secrets/cert.bin  [SHA256:vAjPIK2hnuc7hdbXVMstyfoEMXBzSnCC+hTjV+/Y6uQ]
+         # encrypted  git@github.com:demo__repob.git/secrets/token.txt  [SHA256:vAjPIK2hnuc7hdbXVMstyfoEMXBzSnCC+hTjV+/Y6uQ]
+
+         # encrypted: 4, plain: 0, not stored yet: 0  
+         # √ ssh-keygen -lf keys/key.pub  
+         # 256 SHA256:vAjPIK2hnuc7hdbXVMstyfoEMXBzSnCC+hTjV+/Y6uQ gits-os-agent-demo-key (ED25519)
 
 ssh-keygen -lf keys/key.pub               # the same fingerprint 
     # (It prints the fingerprint of the public key in keys/key.pub. It changes nothing: no key is created or modified.)
