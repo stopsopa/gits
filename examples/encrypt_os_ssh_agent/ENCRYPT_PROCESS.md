@@ -682,6 +682,20 @@ cd ..
 /bin/bash gits.sh crypt status --storage          # repoa: key, repob: key2
 ```
 
+WARNING:
+WARNING:
+WARNING:
+WARNING:
+WARNING:
+Iteresting case is here:
+```
+So "give the new worker access and keep the old one" is a rewrap to two targets, old and new:
+
+ssenc rekey --rewrap-only --ssh-key "SHA256:<old>" --new-ssh-key "SHA256:<old>" --new-ssh-key "SHA256:<new>" -i IN -o OUT
+
+The body is untouched, and the file ends up with two #slot lines.
+```
+
 Keep in mind: a rekey doesn't clean the history of the storage. Old commits stay readable with
 the old key; when a key leaked, the secrets themselves have to be changed.
 
