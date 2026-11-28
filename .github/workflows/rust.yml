@@ -58,13 +58,13 @@ jobs:
 
       # tests/test016 and tests/test018 run the demos examples/encrypt and examples/encrypt_os_ssh_agent:
       # their encrypt.sh turns server.ts into server.js with esbuild (package.json in the root),
-      # and installs it with pnpm when it is not there. Installed here, as a step of its own, to
-      # see its output (and "pnpm: command not found" is not a failure of a test any more)
-      - name: Install pnpm and esbuild
+      # and runs "pnpm install" only when node_modules/.bin/esbuild is not there. Here it is put
+      # there with npm, which is already on the runner: the newest pnpm (12) refuses the install
+      # because of the build script of esbuild (ERR_PNPM_IGNORED_BUILDS). esbuild works without
+      # that script. --no-package-lock: only node_modules is created
+      - name: Install esbuild
         run: |
-          npm install -g pnpm
-          pnpm --version
-          pnpm install --frozen-lockfile
+          npm install --no-package-lock
           node_modules/.bin/esbuild --version
 
       # zsh: GITS_SHELL is tested with bash and with zsh

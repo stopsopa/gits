@@ -1,5 +1,13 @@
 # gits
 
+## TLDR
+
+The setup for real use, command by command: gits with encrypted files, the key taken from the
+ssh-agent which is already running in your terminal:
+[examples/encrypt_os_ssh_agent/ENCRYPT_PROCESS.md](examples/encrypt_os_ssh_agent/ENCRYPT_PROCESS.md).
+
+## What it is
+
 Keeps the files which don't belong to the repository of a project (`.env`, local configs,
 editor settings, dotfiles from the home directory) in **one private git repository, the storage**.
 Every project owns one directory there.
