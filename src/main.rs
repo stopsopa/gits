@@ -39,7 +39,7 @@ struct Var {
     about: &'static str,
 }
 
-const VARS: [Var; 7] = [
+const VARS: [Var; 8] = [
     Var {
         name: ENV_SOURCE,
         default: "",
@@ -60,6 +60,14 @@ const VARS: [Var; 7] = [
         required: false,
         unset: "(not used: elements SOURCE:e:TARGET can't be handled)",
         about: "unix socket of the encoder process. Not defined: :e: is ignored, files are stored as they are",
+    },
+    Var {
+        name: crypt::ENV_DETECT,
+        default: "",
+        required: false,
+        unset: "(built-in: files of https://github.com/stopsopa/encrypt, '#ssenc1 ...' + '#slot ...')",
+        about: "script which tells whether a stored file is an encrypted one: <script> <file>, exit code 0 yes \
+                (what it prints is shown by 'gits crypt status'), 1 no",
     },
     Var {
         name: commands::ENV_TEMPLATE,
@@ -455,6 +463,15 @@ Encryption (elements SOURCE:e:TARGET):
                    also projects which are not on this machine (not for encrypt)
     Without --yes: only the list of files which would change, exit code 1.
     A file is an encrypted one when it is text and starts with the lines '#ssenc1 ...' + '#slot ...'.
+
+  GITS_ENCRYPTION_DETECT=<script>
+                        another format behind the socket: the script says whether a stored file
+                        is an encrypted one, in place of the rule above. gits then knows nothing
+                        about the format. Executed for one file: <script> <absolute path>
+                          exit code 0   encrypted; the lines it prints are shown by
+                                        'gits crypt status' in [...]
+                          exit code 1   not encrypted
+                          other         an error, gits stops
 
 Everything which needs the storage clones it to a directory with a random name in the current
 directory and removes it at the end.

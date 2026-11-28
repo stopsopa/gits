@@ -17,6 +17,11 @@ GITS_ENCRYPTION_SOCKET=""
     as they are (an error only when a file is already stored encrypted). See: gits crypt
     (was: GITSTORAGETENCRYPTIONSOCKET)
 
+GITS_ENCRYPTION_DETECT=""
+    script which says whether a stored file is an encrypted one: <script> <file>, exit code
+    0 yes (what it prints is shown by gits crypt status), 1 no. Not defined: the built-in rule,
+    the files of https://github.com/stopsopa/encrypt. See examples/base64_md5
+
 GITS_<COMMAND>_<EVENT>="~/.gits/events/script.sh"
 GITS_<COMMAND>_ALL="~/.gits/events/script.sh"
 GITS_ALL="~/.gits/events/script.sh"

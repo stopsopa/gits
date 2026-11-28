@@ -36,6 +36,8 @@
 # test017   gits --env [export]: the env vars which are defined and differ from the default
 # test018   the demo examples/encrypt_os_ssh_agent: like test016, but the key is taken from the
 #           ssh-agent of the terminal (in the test: a private agent in that role)
+# test019   the demo examples/base64_md5: an encoder process which is not the encrypt project
+#           (<md5>:<base64>), and GITS_ENCRYPTION_DETECT: gits knows only the protocol
 #
 
 CODE=0
@@ -239,6 +241,16 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test018/test.sh || CODE=1
+
+hide_configs
+
+cat <<EEE
+
+=============== tests/test019/test.sh ===============
+
+EEE
+
+/bin/bash tests/test019/test.sh || CODE=1
 
 hide_configs
 

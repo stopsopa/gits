@@ -3,11 +3,12 @@ use std::fs;
 use std::io::Read;
 use std::path::Path;
 
+use crate::cli::{cli, Options};
 use crate::config;
 use crate::events;
 use crate::ops::{self, Storage, Temp};
 use crate::socket::{Lazy, ENV_SOCKET};
-use crate::util::{git_out, green, red, unique_sibling, yellow};
+use crate::util::{env, expand_tilde, git_out, green, red, unique_sibling, yellow};
 use crate::Ctx;
 
 /*
@@ -35,8 +36,18 @@ const SNIFF: usize = 8000;
 const MAGIC: &str = "#ssenc1 ";
 const SLOT: &str = "#slot ";
 
+// A script which tells whether a stored file is an encrypted one, in place of the built-in
+// detection (which knows only the files of https://github.com/stopsopa/encrypt). With it gits
+// knows nothing about the format of an encrypted file: the format is the business of the
+// encoder process behind the socket, and of this script.
+pub const ENV_DETECT: &str = "GITS_ENCRYPTION_DETECT";
+
 /**
- * Some(keys): the file is an encrypted one. None: it is not (or it doesn't exist).
+ * Ok(Some(keys)): the file is an encrypted one. Ok(None): it is not (or it doesn't exist).
+ *
+ * GITS_ENCRYPTION_DETECT defined: the script decides, see detect().
+ *
+ * Not defined, the built-in detection:
  *
  * 1. a binary file (a NUL byte at its beginning) is never an encrypted one: encrypted output
  *    is always ASCII text, also when the input was binary
@@ -46,14 +57,66 @@ const SLOT: &str = "#slot ";
  * keys: what opens the file, for a human: fingerprint of an ssh key ("SHA256:...") or "password".
  * No key is needed to read them.
  */
-pub fn slots(file: &Path) -> Option<Vec<String>> {
+pub fn slots(file: &Path) -> Result<Option<Vec<String>>, String> {
+    if !file.is_file() {
+        return Ok(None);
+    }
+    if let Some(script) = env(ENV_DETECT) {
+        return detect(&script, file);
+    }
     let mut head = Vec::new();
-    fs::File::open(file)
-        .ok()?
-        .take(64 * 1024)
-        .read_to_end(&mut head)
-        .ok()?;
-    slots_of(&head)
+    let read = fs::File::open(file).and_then(|f| f.take(64 * 1024).read_to_end(&mut head));
+    if read.is_err() {
+        return Ok(None);
+    }
+    Ok(slots_of(&head))
+}
+
+/**
+ * GITS_ENCRYPTION_DETECT=<script>: executed by the shell of GITS_SHELL for one file,
+ *
+ *   <shell> <script> <absolute path of the file>
+ *
+ *   exit code 0     the file is an encrypted one. What it printed, one line for each, is shown
+ *                   by "gits crypt status" in [...] (what opens the file, or how it is
+ *                   encoded); it can print nothing
+ *   exit code 1     the file is not an encrypted one
+ *   anything else   an error: gits stops, with what the script printed to stderr
+ *
+ * The path: absolute, ~/..., or relative to the directory gits was started in.
+ */
+fn detect(script: &str, file: &Path) -> Result<Option<Vec<String>>, String> {
+    let mut path = expand_tilde(script);
+    if !path.is_absolute() {
+        let cwd = std::env::current_dir().map_err(|e| format!("can't read current directory: {e}"))?;
+        path = cwd.join(path);
+    }
+    if !path.is_file() {
+        return Err(format!(
+            "{ENV_DETECT}: script >{}< doesn't exist",
+            path.display()
+        ));
+    }
+    let args = [path.display().to_string(), file.display().to_string()];
+    let out = cli(config::shell(), args, Options::new())
+        .map_err(|e| format!("{ENV_DETECT}: can't run script >{}<: {e}", path.display()))?;
+    match out.code {
+        Some(0) => Ok(Some(
+            out.stdout_text()
+                .lines()
+                .map(|line| line.trim().to_string())
+                .filter(|line| !line.is_empty())
+                .collect(),
+        )),
+        Some(1) => Ok(None),
+        _ => Err(format!(
+            "{ENV_DETECT}: script >{}< failed for >{}< (exit code 0: encrypted, 1: not, it ended with {}): {}",
+            path.display(),
+            file.display(),
+            out.code.map(|c| c.to_string()).unwrap_or_else(|| "a signal".to_string()),
+            out.stderr_text().trim()
+        )),
+    }
 }
 
 pub fn slots_of(head: &[u8]) -> Option<Vec<String>> {
@@ -221,24 +284,24 @@ pub fn run(ctx: &Ctx, args: &[String], yes: bool) -> Result<i32, String> {
     if scope == Scope::Storage {
         let mut all = BTreeSet::new();
         walk(&storage.root, &storage.root, &mut all);
-        targets = all
-            .into_iter()
-            .filter(|target| slots(&storage.root.join(target)).is_some())
-            .collect();
+        targets = BTreeSet::new();
+        for target in all {
+            if slots(&storage.root.join(&target))?.is_some() {
+                targets.insert(target);
+            }
+        }
     }
 
-    let files: Vec<(String, Form)> = targets
-        .into_iter()
-        .map(|target| {
-            let stored = storage.root.join(&target);
-            let form = match slots(&stored) {
-                Some(keys) => Form::Encrypted(keys),
-                None if stored.is_file() => Form::Plain,
-                None => Form::Missing,
-            };
-            (target, form)
-        })
-        .collect();
+    let mut files: Vec<(String, Form)> = Vec::new();
+    for target in targets {
+        let stored = storage.root.join(&target);
+        let form = match slots(&stored)? {
+            Some(keys) => Form::Encrypted(keys),
+            None if stored.is_file() => Form::Plain,
+            None => Form::Missing,
+        };
+        files.push((target, form));
+    }
 
     let scope_text = match scope {
         Scope::Project => "':e:' files of this project",
@@ -253,7 +316,13 @@ pub fn run(ctx: &Ctx, args: &[String], yes: bool) -> Result<i32, String> {
             match form {
                 Form::Encrypted(keys) => {
                     encrypted += 1;
-                    println!("  {}  {target}  [{}]", green("encrypted"), keys.join(", "));
+                    // a detection script may name nothing which opens the file
+                    let keys = if keys.is_empty() {
+                        String::new()
+                    } else {
+                        format!("  [{}]", keys.join(", "))
+                    };
+                    println!("  {}  {target}{keys}", green("encrypted"));
                 }
                 Form::Plain => {
                     plain += 1;

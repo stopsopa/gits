@@ -611,7 +611,7 @@ pub(crate) fn without_socket(
         },
     };
     for entry in project.list.iter().filter(|e| e.encrypted) {
-        if crypt::slots(&storage.root.join(&entry.target)).is_some() {
+        if crypt::slots(&storage.root.join(&entry.target))?.is_some() {
             return Err(format!(
                 "'{}' is stored encrypted but {stored_but} \
                  (to store everything not encrypted again: gits crypt decrypt)",

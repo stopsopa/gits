@@ -29,3 +29,10 @@
 /examples/encrypt_os_ssh_agent/GITS_PULL_TO_SYNC/
 /examples/encrypt_os_ssh_agent/repoa/
 /examples/encrypt_os_ssh_agent/repob/
+# examples/base64_md5/ENCRYPT_PROCESS.md: everything its scripts create
+/examples/base64_md5/tmp/
+/examples/base64_md5/server.log
+/examples/base64_md5/gits_source/
+/examples/base64_md5/GITS_PULL_TO_SYNC/
+/examples/base64_md5/repoa/
+/examples/base64_md5/repob/

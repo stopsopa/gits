@@ -391,3 +391,15 @@ The design and the decisions: `examples/encrypt/ENCRYPT_IN_GITS_PLAN.md`.
   the key variables are paths used as they are
 - `examples/README.md`: the two demos compared
 - test: `tests/test018`
+
+# GITS_ENCRYPTION_DETECT, examples/base64_md5
+
+- gits had one rule about the format of an encrypted file built in: "text which starts with
+  `#ssenc1 ...` + `#slot ...`" (`src/crypt.rs`, `slots`), used by `gits crypt` and by the error
+  "stored encrypted but there is no socket". Everything else already went through the protocol
+- **`GITS_ENCRYPTION_DETECT=<script>`** replaces that rule: `<script> <absolute path>`, exit
+  code 0 encrypted (its lines are shown by `gits crypt status` in `[...]`), 1 not, anything else
+  an error. Environment only, executed by `GITS_SHELL`. Not defined: the built-in rule, as before
+- `examples/base64_md5`: a demo with an encoder process which is not the encrypt project, one
+  line `<md5 of the base64>:<base64>`, with its `detect.sh`. No keys, nothing to build
+- test: `tests/test019`

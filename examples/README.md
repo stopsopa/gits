@@ -12,6 +12,7 @@ But then I realised that I could actually reuse OS ssh-agent - one thing less to
 | --- | --- |
 | [encrypt/](encrypt/ENCRYPT_PROCESS.md) | gits with encryption, **with an ssh-agent of its own** | 
 | [encrypt_os_ssh_agent/](encrypt_os_ssh_agent/ENCRYPT_PROCESS.md) | the same, **with the ssh-agent of your terminal** and a separate key loaded into it |
+| [base64_md5/](base64_md5/ENCRYPT_PROCESS.md) | gits with an encoder process which is **not encryption at all** (`<md5>:<base64>`): proof that gits knows only the socket protocol |
 | [wait/](wait/SUMMARY.md) | not about gits: ways for a program to send a request to a unix socket and wait for the reply |
 | [SUMMARY.md](SUMMARY.md) | every use case of gits, command by command, in a directory `s/` |
 
@@ -47,3 +48,18 @@ Which one to look at:
   separate key only for gits, the key can have a passphrase, and it can be changed
   (`gits crypt rekey`) without touching the GitHub one. The background is in
   [USE_OS_SSH_WITH_SEPARATE_SSH_KEY.md](encrypt_os_ssh_agent/USE_OS_SSH_WITH_SEPARATE_SSH_KEY.md).
+
+## base64_md5
+
+The same wrapper, the same projects, the same gits commands, but behind the socket there is no
+`ssenc`, no ssh key and no ssh-agent: a server of its own which stores a file as one line,
+`<md5 of the base64 text>:<base64 of the content>`. It protects nothing and is not meant to.
+
+It is there to show, and to test (`tests/test019`), that gits is not tied to the encrypt
+project. gits knows three things, all from outside: the requests `encode` / `decode`, the reply
+`error MALFORMED` ("not an encoded file"), and the script of `GITS_ENCRYPTION_DETECT`, which
+says whether a stored file is an encoded one when there is no server to ask
+(`gits crypt status`). The last one is the only place where gits has a rule of its own (the
+files of the encrypt project), and the variable replaces it.
+
+It is also the smallest of the three to read: no keys, nothing to build, `server.ts` runs as it is.
