@@ -3,6 +3,7 @@
 # generated is removed and created again:
 #
 #   gits_source/   the storage (GITS_SOURCE of the demo, see env.sh): an empty local git repository
+#   GITS_PULL_TO_SYNC/   the clone of the storage gits keeps between its commands: removed
 #   repoa/         a project: git repository with one commit, .git/gits.sh created by "gits init",
 #   repob/         its git-ignored files registered with "gits add" (some of them encrypted)
 #   tmp/           removed (socket and pid file of the server)
@@ -119,7 +120,8 @@ KEYS_OUTPUT="$(/bin/bash "${_DIR}/keys.sh")" || fail "keys.sh failed: ${KEYS_OUT
 
 # --- the storage. Not bare, so its files can be looked at: a push updates the files too
 
-rm -rf "${GITS_SOURCE:?}"
+# the kept clone of the old storage goes with it: the new storage has another history
+rm -rf "${GITS_SOURCE:?}" "${GITS_PULL_TO_SYNC:?}"
 g init -q "${GITS_SOURCE}" || fail "git init failed, GITS_SOURCE=>${GITS_SOURCE}<"
 g -C "${GITS_SOURCE}" config receive.denyCurrentBranch updateInstead
 

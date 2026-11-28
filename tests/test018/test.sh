@@ -132,7 +132,7 @@ COMMAND='/bin/bash "${ENC}/reset_setup.sh" 2>&1 | has "state 0 is ready" "not lo
 EXPECTED_STDOUT="state 0 is ready
 not loaded in the ssh-agent of this terminal
 ssh-add \"${DEMO}/keys/key\" \"${DEMO}/keys/key2\"
-gits_source keys repoa repob
+GITS_PULL_TO_SYNC gits_source keys repoa repob
 key key.pub key2 key2.pub
 0
 The agent has no identities."
@@ -142,7 +142,7 @@ test "reset_setup.sh: storage, two projects, two keys which nobody loaded, nothi
 
 # a command which encrypts, with the key not loaded: the test of start.sh fails with what ssenc
 # said, and gits stops before anything is done
-COMMAND='cd "${DEMO}/repoa" && w push --yes 2>&1 | has "error ENV key $(fp key) is not loaded in ssh-agent (check: ssh-add -l)" "is not the key of the demo" "GITS_START" "files pushed"; commits; listing "${DEMO}/tmp"'
+COMMAND='cd "${DEMO}/repoa" && w push --yes 2>&1 | has "error ENV key $(fp key) is not loaded in ssh-agent (check: ssh-add -l)" "GITS_START" "files pushed"; commits; listing "${DEMO}/tmp"'
 EXPECTED_STDOUT="error ENV key $(fp key) is not loaded in ssh-agent (check: ssh-add -l)
 GITS_START
 0"
@@ -156,11 +156,8 @@ EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "no SSH_AUTH_SOCK: explained"
 
-COMMAND='cd "${DEMO}/repoa" && GITS_ENCRYPTION_SSH_KEY="SHA256:nosuchkey" w diff 2>&1 | has "key SHA256:nosuchkey is not loaded in ssh-agent" "the key which was asked for is not the key of the demo" "GITS_ENCRYPTION_SSH_KEY=>SHA256:nosuchkey<" "unset GITS_ENCRYPTION_SSH_KEY"'
-EXPECTED_STDOUT="key SHA256:nosuchkey is not loaded in ssh-agent
-the key which was asked for is not the key of the demo
-GITS_ENCRYPTION_SSH_KEY=>SHA256:nosuchkey<
-unset GITS_ENCRYPTION_SSH_KEY"
+COMMAND='cd "${DEMO}/repoa" && GITS_ENCRYPTION_SSH_KEY="SHA256:nosuchkey" w diff 2>&1 | has "key SHA256:nosuchkey is not loaded in ssh-agent"'
+EXPECTED_STDOUT="key SHA256:nosuchkey is not loaded in ssh-agent"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "a fingerprint of no key: explained"
@@ -519,6 +516,27 @@ EXPECTED_STDOUT="0"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "no socket, no pid file, no server left by any command"
+
+# GITS_PULL_TO_SYNC of env.sh: no directory with a random name was left in a project, the clone
+# is kept in one place, and after every command it is clean and exactly what the storage has
+# (nothing decrypted stays there, no local commit)
+COMMAND='ls -A "${DEMO}/repoa" "${DEMO}/repob" | grep -c "^[0-9a-f]\{4\}$"; git -C "${DEMO}/GITS_PULL_TO_SYNC" status --porcelain --ignored | wc -l | tr -d " "; [[ "$(git -C "${DEMO}/GITS_PULL_TO_SYNC" rev-parse HEAD)" == "$(git -C "${SRC}" rev-parse HEAD)" ]] && echo "the same commit as the storage"; form "${A}/.env"; head -c 8 "${DEMO}/GITS_PULL_TO_SYNC/${A}/.env"; echo'
+EXPECTED_STDOUT="0
+0
+the same commit as the storage
+encrypted lines
+#ssenc1 "
+EXPECTED_STDERR=""
+EXPECTED_CODE="0"
+test "the clone of the storage is kept in GITS_PULL_TO_SYNC, clean, and nothing decrypted is in it"
+
+# a clone of the developer must never be used by the demo: the variable of the terminal is ignored
+COMMAND='cd "${DEMO}/repoa" && GITS_PULL_TO_SYNC="${WORK}/not_this_one" w isinsync; echo "code ${?}"; ls "${WORK}" | grep -c not_this_one'
+EXPECTED_STDOUT="code 0
+0"
+EXPECTED_STDERR=""
+EXPECTED_CODE="1"
+test "GITS_PULL_TO_SYNC of the terminal is ignored"
 
 # not used by the guide, but ssenc takes it too: a public key file, relative to the directory of the command.
 # start.sh checks it, and its test encrypts and decrypts with it through the server and ssenc

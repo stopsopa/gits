@@ -56,6 +56,17 @@ jobs:
         with:
           node-version: 24
 
+      # tests/test016 and tests/test018 run the demos examples/encrypt and examples/encrypt_os_ssh_agent:
+      # their encrypt.sh turns server.ts into server.js with esbuild (package.json in the root),
+      # and installs it with pnpm when it is not there. Installed here, as a step of its own, to
+      # see its output (and "pnpm: command not found" is not a failure of a test any more)
+      - name: Install pnpm and esbuild
+        run: |
+          npm install -g pnpm
+          pnpm --version
+          pnpm install --frozen-lockfile
+          node_modules/.bin/esbuild --version
+
       # zsh: GITS_SHELL is tested with bash and with zsh
       # nc:  tests/encoder/encoder-start.sh asks the socket with it whether the encoder process answers
       # (python3, which tests/test014 needs for tests/terminal.py, is already on the runner)
@@ -79,7 +90,8 @@ jobs:
       - name: Compile ssenc binary of submodules/encrypt
         run: /bin/bash submodules/encrypt/rust/compile.sh
 
-      # ssh-keygen, ssh-agent, ssh-add: demo key and private agent of tests/test007 and tests/test011
+      # ssh-keygen, ssh-agent, ssh-add: demo key and private agent of tests/test007, tests/test011,
+      # tests/test016 and tests/test018
       - name: Check ssh tools
         run: |
           command -v ssh-keygen ssh-agent ssh-add

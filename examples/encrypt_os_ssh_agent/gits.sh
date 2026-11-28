@@ -11,6 +11,9 @@
 #
 #   GITS_SOURCE              (env.sh) the storage: examples/encrypt_os_ssh_agent/gits_source, created by
 #                            reset_setup.sh. GITS_SOURCE of your terminal is ignored
+#   GITS_PULL_TO_SYNC        (env.sh) the directory where gits keeps its clone of the storage
+#                            between the commands: examples/encrypt_os_ssh_agent/GITS_PULL_TO_SYNC.
+#                            GITS_PULL_TO_SYNC of your terminal is ignored
 #   GITS_ENCRYPTION_SOCKET   (env.sh) the socket gits sends its encode / decode requests to
 #   GITS_START=start.sh      once, the first thing of a command: starts the server and tests it
 #                            (the test fails when the key is not loaded in your ssh-agent).
@@ -44,9 +47,6 @@ if [[ ! -f "${GITS_DEMO_BIN}" ]]; then
   echo "${0} error: gits binary not found GITS_DEMO_BIN=>${GITS_DEMO_BIN}<, compile it: /bin/bash compile.sh"
   exit 1
 fi
-
-# a clone kept by your own setup belongs to your real storage, not to the storage of the demo
-unset GITS_PULL_TO_SYNC
 
 if [[ -z "${GITS_ENCRYPTION_SOCKET}" ]]; then
   # "GITS_ENCRYPTION_SOCKET= gits.sh ...": gits as if there was no encoder process at all,

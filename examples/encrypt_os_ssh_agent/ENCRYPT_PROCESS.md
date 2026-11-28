@@ -49,6 +49,7 @@ Everything is in `examples/encrypt_os_ssh_agent/`:
 | [gits.sh](gits.sh) | the wrapper you call in place of `gits` |
 | [reset_setup.sh](reset_setup.sh) | brings the demo to its state 0: removes and creates again everything below (the keys: kept as files, taken out of your agent) |
 | `gits_source/` | generated: the storage, a local git repository (`GITS_SOURCE` of the demo) |
+| `GITS_PULL_TO_SYNC/` | generated: the clone of the storage which gits keeps between its commands (`GITS_PULL_TO_SYNC` of the demo) |
 | `repoa/`, `repob/` | generated: two projects to play with |
 | `keys/` | generated: the two keys. The files are not removed by `reset_setup.sh` |
 | `tmp/` | generated: socket and pid file of the server |
@@ -113,6 +114,7 @@ generated and creates it again:
 | | |
 |---|---|
 | `gits_source/` | the storage: an empty git repository. Not bare, so after a push its files can be looked at |
+| `GITS_PULL_TO_SYNC/` | removed: the kept clone belonged to the old storage. The next gits command clones again |
 | `repoa/` | a project. In git: `README.md`, `src/app.js`, `config/default.json`. Ignored by git: `.env`, `config/local.json` |
 | `repob/` | a project. In git: `README.md`, `main.sh`. Ignored by git: `.env.local`, `secrets/token.txt`, `secrets/cert.bin` (binary), `notes.txt` |
 | `keys/key`, `keys/key2` | the two keys (and their `.pub`): created the first time, the files are **kept** by every next reset. Not loaded in the agent after it |
@@ -158,6 +160,7 @@ is never contacted: gits only takes the name of the directory in the storage fro
 | Variable | Default | |
 |---|---|---|
 | `GITS_SOURCE` | `examples/encrypt_os_ssh_agent/gits_source` | **the storage.** gits reads it. Always the one of the demo: `GITS_SOURCE` of your terminal (your real storage) is ignored, the demo can't push there. Somewhere else: `GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES` |
+| `GITS_PULL_TO_SYNC` | `examples/encrypt_os_ssh_agent/GITS_PULL_TO_SYNC` | **the clone of the storage, kept between the commands.** gits reads it. Without it every command clones the whole storage into a directory with a random name inside the project and removes it at the end. With it: the first command clones there; every next one runs `git fetch --prune origin`, `git reset --hard` to what origin has and `git clean -f -d -x`, and the same reset and clean again at its end, so nothing decrypted and no local commit stays in it. Always the one of the demo: `GITS_PULL_TO_SYNC` of your terminal (the clone of your real storage) is ignored |
 | `GITS_ENCRYPTION_SOCKET` | `examples/encrypt_os_ssh_agent/tmp/ssenc.sock` | **the socket.** gits reads it: where it sends its requests. At most about 100 characters. Defined as an empty text (`GITS_ENCRYPTION_SOCKET= /bin/bash gits.sh ...`): no socket, the wrapper starts gits without it and without `start.sh` / `stop.sh` |
 | `GITS_ENCRYPTION_SSH_KEY` | the fingerprint of `keys/key`: `$(ssh-keygen -lf keys/key.pub \| cut -d " " -f 2)` | the one variable which says which ssh key is used: it encrypts and it opens what is stored. The key has to be loaded in the agent; this only says **which** of the keys there, by its fingerprint: `SHA256:...`, the second word of what `ssh-keygen -lf <file>.pub` and `ssh-add -l` print. Not a path: once a key is loaded, no file of it is needed. It goes to `ssenc --ssh-key` as it is. Only `start.sh` and `server.ts` use it |
 | `GITS_ENCRYPTION_REKEY_SSH_KEY` | empty | empty by default and it should stay so. Only for the one example of step 7, `gits crypt rekey`, which needs two keys at the same time: the key the stored files get in place of `GITS_ENCRYPTION_SSH_KEY`. A fingerprint too, given only in that command. That key has to be loaded in the agent too |
@@ -168,12 +171,12 @@ is never contacted: gits only takes the name of the directory in the storage fro
 | `GITS_DEMO_BIN` | `bin/<arch>/gits` | the gits binary `gits.sh` starts |
 | `GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES` | `examples/encrypt_os_ssh_agent` | where everything generated goes: `gits_source/`, `repoa/`, `repob/`, `keys/`, `tmp/`, `server.log` |
 
-A variable defined in the terminal wins over the default (besides `GITS_SOURCE`): `GITS_DEMO_LOG="" /bin/bash examples/encrypt_os_ssh_agent/gits.sh diff`.
+A variable defined in the terminal wins over the default (besides `GITS_SOURCE` and `GITS_PULL_TO_SYNC`): `GITS_DEMO_LOG="" /bin/bash examples/encrypt_os_ssh_agent/gits.sh diff`.
 
 That includes `GITS_ENCRYPTION_SSH_KEY`: when it is exported in your terminal (e.g. you tried
 `export GITS_ENCRYPTION_SSH_KEY=...` with a key of your own), every command of this guide asks
 for **that** key, not for `keys/key`, and fails with `key SHA256:... is not loaded in ssh-agent`
-although the keys of the demo are loaded. `start.sh` says so when it happens. Check and undo:
+although the keys of the demo are loaded. Check and undo:
 
 ```sh
 echo "${GITS_ENCRYPTION_SSH_KEY}"         # empty: the default of env.sh is used, the key of the demo
@@ -366,7 +369,7 @@ cat server.log
 2026-11-26T19:21:08.015Z listening on .../examples/encrypt_os_ssh_agent/tmp/ssenc.sock
 2026-11-26T19:21:08.276Z encrypted /var/folders/.../gits-demo-PYLxrg/plain -> /var/folders/.../gits-demo-PYLxrg/encrypted
 2026-11-26T19:21:08.280Z decrypted /var/folders/.../gits-demo-PYLxrg/encrypted -> /var/folders/.../gits-demo-PYLxrg/back
-2026-11-26T19:21:08.377Z encrypted .../repoa/.env -> .../repoa/1571/git@github.com:demo__repoa.git/.env
+2026-11-26T19:21:08.377Z encrypted .../repoa/.env -> .../GITS_PULL_TO_SYNC/git@github.com:demo__repoa.git/.env
 ```
 
 ## 6. The whole storage: plain, encrypted, plain again, another key
@@ -418,14 +421,18 @@ the same for a storage which is a directory on this machine (this demo) and one 
    (`git@github.com:demo__repoa.git/.env`). SOURCE, the local file (`repoa/.env`), is not
    used from here on: it is not read, not compared, not changed. It doesn't even have to exist.
 4. **The clone.** gits clones `GITS_SOURCE` (`git clone`, whatever the address is: a directory
-   or `git@github.com:...`) to a directory with a random name in the current directory. With
-   GitHub this is the moment the files are downloaded. Everything below happens in that clone.
+   or `git@github.com:...`). In this demo into the directory `GITS_PULL_TO_SYNC/`, which is
+   kept: only the first command really clones, every next one fetches what is new and puts the
+   directory back to exactly what the storage has (`git fetch --prune`, `git reset --hard`,
+   `git clean -f -d -x`). Without the variable `GITS_PULL_TO_SYNC` it would be a fresh clone
+   into a directory with a random name in the current directory, every time. With GitHub this
+   is the moment the files are downloaded. Everything below happens in that clone.
 5. **The form of every target.** For each TARGET gits opens the file in the clone and reads its
    beginning: text which starts with `#ssenc1 lines|blob ...` and `#slot ...` lines is
    *encrypted*, any other file is *plain*, no file is *missing* (never pushed). No key and no
    socket is needed for that.
 6. **What is to do.** Only the *plain* ones. Encrypted and missing ones are skipped. Nothing
-   plain: `nothing to do`, exit code 0, the clone is removed.
+   plain: `nothing to do`, exit code 0, the clone is put back to what the storage has.
 7. **Without `--yes` it ends here**: the list of the files is printed, exit code 1, nothing is
    changed.
 8. **The socket.** With `--yes`, `GITS_ENCRYPTION_SOCKET` has to be defined and somebody has
@@ -436,13 +443,14 @@ the same for a storage which is a directory on this machine (this demo) and one 
    `encode "<clone>/.../<temporary name>" "<clone>/.../.env"` through the socket and waits for
    the reply. The server starts `ssenc encrypt`, which reads the first file and writes the
    encrypted one in the place of the original. `ok`: the plain copy is removed. `error`: the
-   plain file is moved back, gits stops, the clone is removed, **nothing was pushed**, so the
+   plain file is moved back, gits stops, the clone is reset and cleaned, **nothing was pushed**, so the
    storage is as it was (also the files which were already encrypted in the clone).
 10. **One commit.** `git add -A` and `git commit -m "gits crypt encrypt (project, 1 files)"`
     in the clone.
 11. **One push.** `git push origin HEAD`: to the directory `gits_source` in this demo, to GitHub
     when `GITS_SOURCE` points there. Only now the storage changes.
-12. **Cleaning.** The clone is removed, `stop.sh` (`GITS_EXIT`) stops the server.
+12. **Cleaning.** The clone is reset and cleaned (kept, not removed), `stop.sh` (`GITS_EXIT`)
+    stops the server.
 
 Compared with `/bin/bash ../gits.sh push --yes`: steps 1, 2, 4, 10, 11 and 12 are the same. The
 difference is what gets into the clone between them:
@@ -515,7 +523,7 @@ it belongs to:
 
 ```sh
 /bin/bash gits.sh crypt decrypt --storage         # the list - but that is pretty useless, 
-/bin/bash gits.sh crypt decrypt --storage --yes   # clones remote to tempdir, decrypts all :e:, one commit, one push, rm tempdir
+/bin/bash gits.sh crypt decrypt --storage --yes   # updates the clone in GITS_PULL_TO_SYNC, decrypts all :e:, one commit, one push, cleans the clone
 # we will never want to decrypt all in GITS_SOURCE
 ```
 
@@ -573,7 +581,7 @@ What the next command does, step by step:
 4. **`all`: gits looks for configs.** Every `.git/gits.sh` below the current directory, here
    `repoa` and `repob`. Each one is loaded and its `:e:` elements are collected: one file of
    `repoa`, three of `repob`. A config is the only thing that says "this file should be encrypted".
-5. **gits clones the storage once**, into a temporary directory, and looks at how each of those
+5. **gits brings its clone of the storage up to date** (`GITS_PULL_TO_SYNC/`), and looks at how each of those
    four files is stored: plain (after the decrypt above), already encrypted, or not there.
    `encrypt` takes only the plain ones; the other two kinds are skipped.
 6. **For each plain file one request goes to the socket**: `encode "<file>" "<file>"`, both
@@ -584,7 +592,7 @@ What the next command does, step by step:
    (or `error ...`: then gits stops and nothing is changed in the storage).
 8. **One commit, one push**: `gits crypt encrypt (all, 4 files)`. The storage now has the four
    files encrypted with `key2`.
-9. **gits removes the clone and runs `stop.sh`** (`GITS_EXIT`): the server is stopped.
+9. **gits resets and cleans the clone and runs `stop.sh`** (`GITS_EXIT`): the server is stopped.
 
 What is encrypted is what was **stored** (the plain files in the storage). The local files in
 `repoa/` and `repob/` are not read and not changed. Without `--yes` steps 6 to 8 don't happen:
@@ -762,7 +770,7 @@ ssh-add -d examples/encrypt_os_ssh_agent/keys/key.pub examples/encrypt_os_ssh_ag
 ssh-add -l                                # only your own keys
 
 /bin/bash examples/encrypt_os_ssh_agent/stop.sh
-rm -rf examples/encrypt_os_ssh_agent/tmp examples/encrypt_os_ssh_agent/keys examples/encrypt_os_ssh_agent/gits_source examples/encrypt_os_ssh_agent/repoa examples/encrypt_os_ssh_agent/repob examples/encrypt_os_ssh_agent/server.log examples/encrypt_os_ssh_agent/server.js examples/encrypt_os_ssh_agent/bin
+rm -rf examples/encrypt_os_ssh_agent/tmp examples/encrypt_os_ssh_agent/keys examples/encrypt_os_ssh_agent/gits_source examples/encrypt_os_ssh_agent/GITS_PULL_TO_SYNC examples/encrypt_os_ssh_agent/repoa examples/encrypt_os_ssh_agent/repob examples/encrypt_os_ssh_agent/server.log examples/encrypt_os_ssh_agent/server.js examples/encrypt_os_ssh_agent/bin
 ```
 
 The files are already removed and the keys are still in the agent: `ssh-add -l` shows them

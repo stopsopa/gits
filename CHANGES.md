@@ -384,6 +384,8 @@ The design and the decisions: `examples/encrypt/ENCRYPT_IN_GITS_PLAN.md`.
 - `GITS_ENCRYPTION_SSH_KEY` / `GITS_ENCRYPTION_REKEY_SSH_KEY` there: a fingerprint
   `SHA256:...` (the default: `ssh-keygen -lf keys/key.pub`), passed to `ssenc --ssh-key` as it is
 - its key files are in `keys/` and survive `reset_setup.sh`
+- it sets `GITS_PULL_TO_SYNC` to `examples/encrypt_os_ssh_agent/GITS_PULL_TO_SYNC`: the clone of
+  the storage is kept there between the commands (the one of the terminal is ignored)
 - `examples/encrypt`: `GITS_DEMO_AGENT`, `GITS_DEMO_TMP`, `GITS_DEMO_SOURCE` are gone. `env.sh`
   sets `SSH_AUTH_SOCK` to the socket of the agent of the demo (never the one of the terminal),
   the key variables are paths used as they are

@@ -12,7 +12,7 @@
 # your terminal, SSH_AUTH_SOCK, and the keys have to be loaded into it by you (ssh-add).
 #
 
-# Where everything generated goes: gits_source/, repoa/, repob/, keys/, tmp/, server.log.
+# Where everything generated goes: gits_source/, GITS_PULL_TO_SYNC/, repoa/, repob/, keys/, tmp/, server.log.
 # Here, next to the scripts. The test tests/test018 points it to its own directory.
 export GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES="${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES:-${_DIR}}"
 
@@ -21,6 +21,19 @@ export GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES="${GITS_MAIN_ENCRYPT_DIRECTOR
 # GITS_SOURCE of your terminal is your real storage, the demo must never push there, and
 # reset_setup.sh removes this directory. To have it somewhere else: GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES.
 export GITS_SOURCE="${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/gits_source"
+
+# Where gits keeps its clone of the storage between the commands. Without this variable every
+# command clones the whole storage again, into a directory with a random name inside the
+# project, and removes it at the end. With it:
+#   the first command      git clone of GITS_SOURCE into this directory
+#   every next command     git fetch --prune origin
+#                          git reset --hard <what origin has>      local commits, staged and changed files: gone
+#                          git clean -f -d -x                      untracked files and directories, also ignored ones: gone
+#   the end of a command   the same reset + clean again: nothing decrypted stays in it
+# A directory which is not empty and not a clone of GITS_SOURCE is refused and not touched.
+# Deliberately NOT "the one of the terminal wins": GITS_PULL_TO_SYNC of your terminal is the
+# clone of your real storage. reset_setup.sh removes this directory (the storage is new then).
+export GITS_PULL_TO_SYNC="${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/GITS_PULL_TO_SYNC"
 
 # The second variable gits reads: the unix socket it sends encode / decode requests to.
 # start.sh starts the server on it, stop.sh removes it. At most about 100 characters.
