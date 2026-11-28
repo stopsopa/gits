@@ -511,8 +511,10 @@ test "after rewrap: the first key opens repoa again"
 
 # ---------- 10. nothing left, wrong arguments ----------
 
-COMMAND='listing "${DEMO}/tmp"; ps -A -o command= | grep -c "[e]ncrypt_os_ssh_agent/server.js"'
-EXPECTED_STDOUT="0"
+# (not "listing": for an empty directory it prints nothing on macOS and an empty line on Linux)
+COMMAND='ls -A "${DEMO}/tmp" | wc -l | tr -d " "; ps -A -o command= | grep -c "[e]ncrypt_os_ssh_agent/server.js"'
+EXPECTED_STDOUT="0
+0"
 EXPECTED_STDERR=""
 EXPECTED_CODE="1"
 test "no socket, no pid file, no server left by any command"
