@@ -647,7 +647,7 @@ above), and the server answers the requests `rekey` / `rewrap` only when the
 second variable is given:
 
 ```sh
-/bin/bash gits.sh crypt rekey --storage --yes                              # USAGE: the server was started without GITS_ENCRYPTION_REKEY_SSH_KEY
+/bin/bash gits.sh crypt rekey --storage --yes                              # ERROR: the server was started without GITS_ENCRYPTION_REKEY_SSH_KEY
 GITS_ENCRYPTION_REKEY_SSH_KEY="$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)" /bin/bash gits.sh crypt rekey --storage         # the list
 GITS_ENCRYPTION_REKEY_SSH_KEY="$(ssh-keygen -lf keys/key2.pub | cut -d " " -f 2)" /bin/bash gits.sh crypt rekey --storage --yes   # one commit, one push
   # this one is decoding and encoding in one go - produces just one commit - much safer if we don't want to even for the moment decode in the remote
