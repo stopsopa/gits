@@ -137,13 +137,13 @@ is never contacted: gits only takes the name of the directory in the storage fro
 | `GITS_ENCRYPTION_SSH_KEY` | `examples/encrypt/tmp/key` | the one variable which says which ssh key is used: it encrypts and it opens what is stored (private key file, the public one is `<file>.pub`). Only `start.sh` and `server.ts` use it. The path of the file, nothing is added to it: a full one, or relative to the directory the command is started in (`tmp/key2` in `examples/encrypt`, `../tmp/key2` in `repoa`) |
 | `GITS_ENCRYPTION_REKEY_SSH_KEY` | empty | empty by default and it should stay so. Only for the one example of step 7, `gits crypt rekey`, which needs two keys at the same time: the key the stored files get in place of `GITS_ENCRYPTION_SSH_KEY`. Given only in that command, as the path of the private key file: a full one, or relative to the directory the command is started in (`tmp/key2` in `examples/encrypt`, `../tmp/key` in `repoa`). Nothing is added to it |
 | `GITS_DEMO_LOG` | `examples/encrypt/server.log` | log of the server. Empty (`GITS_DEMO_LOG=""`): no log |
-| `GITS_DEMO_AGENT` | `examples/encrypt/tmp/agent.sock` | socket of the ssh-agent of the demo |
+| `SSH_AUTH_SOCK` | `examples/encrypt/tmp/agent.sock` | socket of the ssh-agent of the demo: the variable every program finds an agent by. Always the one of the demo, like `GITS_SOURCE`: `SSH_AUTH_SOCK` of your terminal (your own agent) is ignored, the demo can't load a key into it or stop it |
 | `GITS_DEMO_SSENC` | `examples/encrypt/bin/ssenc` | the binary `server.js` starts for every request: `rust/target/release/ssenc` of the encrypt repository. A path, or a name found in `PATH` (`GITS_DEMO_SSENC=ssenc` when you installed it) |
 | `GITS_DEMO_ENCRYPT` | `__linked/STOPSOPA__encrypt/STOPSOPA__encrypt`, then `submodules/encrypt` | only `encrypt.sh`: the checkout the binary is copied from |
 | `GITS_DEMO_BIN` | `bin/<arch>/gits` | the gits binary `gits.sh` starts |
 | `GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES` | `examples/encrypt` | where everything generated goes: `gits_source/`, `repoa/`, `repob/`, `tmp/`, `server.log` |
 
-A variable defined in the terminal wins over the default (besides `GITS_SOURCE`): `GITS_DEMO_LOG="" /bin/bash examples/encrypt/gits.sh diff`.
+A variable defined in the terminal wins over the default (besides `GITS_SOURCE` and `SSH_AUTH_SOCK`): `GITS_DEMO_LOG="" /bin/bash examples/encrypt/gits.sh diff`.
 
 ## 3. The keys: keys.sh
 
@@ -175,7 +175,7 @@ cat examples/encrypt/server.log           # listening on ..., then the test: one
 
 `start.sh` does three things and ends only when all of them worked:
 
-1. an ssh-agent listening on `examples/encrypt/tmp/agent.sock`, with the key loaded
+1. an ssh-agent listening on `SSH_AUTH_SOCK` (`examples/encrypt/tmp/agent.sock`), with the key loaded
 2. `node examples/encrypt/server.js` in the background, listening on `GITS_ENCRYPTION_SOCKET`
    (`encrypt.sh` runs first when `server.js` or the binary is missing, or `server.ts` is newer)
 3. `node examples/encrypt/server.js test`: through the socket a file is encrypted, decrypted and compared
@@ -592,9 +592,9 @@ nothing is started for them, and `stop.sh` finds nothing to stop.
 
 ## 9. For real
 
-- your key is already in your own agent: in `start.sh` drop the two commands of its part 1
-  (`ssh-agent`, `ssh-add`), in `stop.sh` the line of the agent, and point `GITS_ENCRYPTION_SSH_KEY`
-  to your key (`~/.ssh/id_ed25519`); the server then asks the agent of `SSH_AUTH_SOCK`
+- your key is already in your own agent: that is the other demo,
+  [examples/encrypt_os_ssh_agent](../encrypt_os_ssh_agent/ENCRYPT_PROCESS.md). No agent is
+  started there, the key is taken from the agent of your terminal
 - the binary: install `rust/target/release/ssenc` of the encrypt repository where you keep your
   programs and point `GITS_DEMO_SSENC` in `env.sh` to it (a path, or `ssenc` when it is in `PATH`).
   `encrypt.sh` copies nothing then, and `bin/` is not needed

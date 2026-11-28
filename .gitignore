@@ -19,3 +19,12 @@
 /examples/encrypt/gits_source/
 /examples/encrypt/repoa/
 /examples/encrypt/repob/
+# examples/encrypt_os_ssh_agent/ENCRYPT_PROCESS.md: everything its scripts create
+/examples/encrypt_os_ssh_agent/tmp/
+/examples/encrypt_os_ssh_agent/keys/
+/examples/encrypt_os_ssh_agent/bin/
+/examples/encrypt_os_ssh_agent/server.js
+/examples/encrypt_os_ssh_agent/server.log
+/examples/encrypt_os_ssh_agent/gits_source/
+/examples/encrypt_os_ssh_agent/repoa/
+/examples/encrypt_os_ssh_agent/repob/

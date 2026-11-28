@@ -34,6 +34,8 @@
 # test016   gits crypt (status, encrypt, decrypt, rekey) and gits without the socket, through the
 #           demo examples/encrypt: reset_setup.sh, the wrapper gits.sh, two keys
 # test017   gits --env [export]: the env vars which are defined and differ from the default
+# test018   the demo examples/encrypt_os_ssh_agent: like test016, but the key is taken from the
+#           ssh-agent of the terminal (in the test: a private agent in that role)
 #
 
 CODE=0
@@ -227,6 +229,16 @@ cat <<EEE
 EEE
 
 /bin/bash tests/test017/test.sh || CODE=1
+
+hide_configs
+
+cat <<EEE
+
+=============== tests/test018/test.sh ===============
+
+EEE
+
+/bin/bash tests/test018/test.sh || CODE=1
 
 hide_configs
 

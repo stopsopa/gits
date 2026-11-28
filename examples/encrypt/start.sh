@@ -43,14 +43,15 @@ fi
 
 mkdir -p "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp"
 
-# 1. The agent. It prints "SSH_AUTH_SOCK=...; SSH_AGENT_PID=...;": eval defines both, only
-#    inside of this script, so ssh-add and the server below talk to this agent.
-eval "$(ssh-agent -a "${GITS_DEMO_AGENT}")" > /dev/null
+# 1. The agent, on the socket env.sh put into SSH_AUTH_SOCK. It prints
+#    "SSH_AUTH_SOCK=...; SSH_AGENT_PID=...;": eval defines both (the first one is the same path
+#    again), so ssh-add and the server below talk to this agent.
+unset SSH_AGENT_PID
+eval "$(ssh-agent -a "${SSH_AUTH_SOCK}")" > /dev/null
 
-# the agent didn't start (e.g. the path of the socket is too long): SSH_AUTH_SOCK is still the
-# one of your terminal, and ssh-add below would load the demo key into YOUR agent
-if [[ "${SSH_AUTH_SOCK}" != "${GITS_DEMO_AGENT}" ]]; then
-  echo "${0} error: ssh-agent didn't start on GITS_DEMO_AGENT=>${GITS_DEMO_AGENT}<, nothing was loaded anywhere"
+# the agent didn't start (e.g. the path of the socket is too long): nothing is loaded anywhere
+if [[ -z "${SSH_AGENT_PID}" ]]; then
+  echo "${0} error: ssh-agent didn't start on SSH_AUTH_SOCK=>${SSH_AUTH_SOCK}<"
   exit 1
 fi
 
@@ -82,6 +83,9 @@ fi
 
 NODE_OPTIONS="" nohup node "${_DIR}/server.js" < /dev/null >> "${GITS_DEMO_LOG:-/dev/null}" 2>&1 &
 PID="${!}"
+# not a job of this shell any more: when stop.sh kills it (a failed test below), bash doesn't
+# print "Terminated: 15"
+disown "${PID}"
 echo "${PID}" > "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/server.pid"
 
 # it listens: the socket file appears (at most 5 seconds). It died: no reason to wait.

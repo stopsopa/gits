@@ -373,3 +373,19 @@ The design and the decisions: `examples/encrypt/ENCRYPT_IN_GITS_PLAN.md`.
   would change it. The order is the one of the table of `gits --help`
 - works without `GITS_SOURCE`; nothing defined: nothing printed, exit code 0
 - test: `tests/test017`
+
+# examples/encrypt_os_ssh_agent
+
+- a second demo, the same steps as `examples/encrypt`, with the key taken from **the ssh-agent
+  of the terminal** (`SSH_AUTH_SOCK`): no agent is started, no key is loaded by a script.
+  `start.sh` is only the server and its test; with a key which is not loaded the test fails
+  and gits stops. Loading the keys (`ssh-add`) is a step of the guide, `reset_setup.sh` takes
+  them out of the agent again
+- `GITS_ENCRYPTION_SSH_KEY` / `GITS_ENCRYPTION_REKEY_SSH_KEY` there: a fingerprint
+  `SHA256:...` (the default: `ssh-keygen -lf keys/key.pub`), passed to `ssenc --ssh-key` as it is
+- its key files are in `keys/` and survive `reset_setup.sh`
+- `examples/encrypt`: `GITS_DEMO_AGENT`, `GITS_DEMO_TMP`, `GITS_DEMO_SOURCE` are gone. `env.sh`
+  sets `SSH_AUTH_SOCK` to the socket of the agent of the demo (never the one of the terminal),
+  the key variables are paths used as they are
+- `examples/README.md`: the two demos compared
+- test: `tests/test018`

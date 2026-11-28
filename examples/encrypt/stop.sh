@@ -41,4 +41,5 @@ function stop {
 stop "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/server.pid" "encrypt/server."
 stop "${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/agent.pid" "ssh-agent"
 
-rm -f "${GITS_ENCRYPTION_SOCKET}" "${GITS_DEMO_AGENT}"
+# SSH_AUTH_SOCK is the socket of the agent of the demo (env.sh), never the one of your terminal
+rm -f "${GITS_ENCRYPTION_SOCKET}" "${SSH_AUTH_SOCK}"

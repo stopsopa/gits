@@ -49,9 +49,15 @@ export GITS_ENCRYPTION_REKEY_SSH_KEY="${GITS_ENCRYPTION_REKEY_SSH_KEY:-}"
 	# 	- start.sh to load to ssh-add and 
 	# 	- server.ts to call ssenc with "--ssh-key", currentKey(), "--new-ssh-key"
 
-# Socket of the ssh-agent which start.sh starts only for the demo: the key above is loaded into
-# this one, never into your own agent.
-GITS_DEMO_AGENT="${GITS_DEMO_AGENT:-${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/agent.sock}"
+# The ssh-agent of the demo. SSH_AUTH_SOCK is the variable every program finds an agent by
+# (ssh-add, ssenc, ssh, git): here it is pointed to a socket of the demo, start.sh starts an
+# agent on it and loads the key above, stop.sh stops it and removes the socket.
+# Deliberately NOT "the one of the terminal wins" (no ${SSH_AUTH_SOCK:-...} here): SSH_AUTH_SOCK
+# of your terminal is your own agent, and the demo must never load a key into it, kill it or
+# remove its socket. At most about 100 characters.
+# A consequence: gits started by gits.sh sees this agent too, not yours. Nothing for the demo
+# (its storage is a local directory), but a storage on GitHub couldn't be cloned with your keys.
+export SSH_AUTH_SOCK="${GITS_MAIN_ENCRYPT_DIRECTORY_WHERE_ALL_LIVES}/tmp/agent.sock"
 
 # Log of the server: one line per file, "encrypted <file> -> <file>" or "decrypted <file> -> <file>".
 # Defined as an empty text (GITS_DEMO_LOG=""): nothing is logged.
